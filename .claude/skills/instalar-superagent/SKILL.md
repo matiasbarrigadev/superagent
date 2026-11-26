@@ -32,20 +32,25 @@ No hace falta nada más para instalar. El número de WhatsApp y la cuenta de Cla
 
 ## A. Railway
 
-### Si hay un template publicado
+### Con el template (siempre la primera opción)
 
-Si la persona tiene un link `railway.com/new/template/...` (o el README lo muestra), es un botón **Deploy** y se
-salta al paso *Verificar*.
+Pasale a la persona este link y que toque **Deploy**:
 
-### Con la CLI de Railway (`railway`, 5.x)
+**https://railway.com/deploy/superagente-en-whatsapp**
+
+El template crea todo: `waha` y `superagent` (imagen `ghcr.io/matiasbarrigadev/superagent`), los volúmenes, el
+dominio y los secretos. No hay que escribir ninguna variable. Cuando `superagent` esté en verde, seguí en *La URL
+del panel* y *Verificar*.
+
+### Con la CLI de Railway (`railway`, 5.x): solo si no se puede usar el template
+
+Por ejemplo, para meterlo en un proyecto que ya existe o si la persona no puede tocar el botón.
 
 Pedile a la persona que haga `railway login` si `railway whoami` falla (el login es suyo). Después:
 
 ```sh
 railway init --name superagent            # o `railway link` a un proyecto existente
 
-# Lo más simple: el template publicado, https://railway.com/deploy/superagente-en-whatsapp (si la persona
-# puede tocar el botón Deploy). Con la CLI, la misma receta:
 # Servicio 1: waha (el nombre "waha" es obligatorio: el gateway lo busca en waha.railway.internal:3000)
 KEY=$(openssl rand -hex 32); PASS=$(openssl rand -hex 24)
 railway add --service waha --image devlikeapro/waha:gows-2026.9.2 \

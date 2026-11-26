@@ -7,7 +7,7 @@ pueden empezar por el [README](README.md).
 
 | Pedido | Qué seguir |
 |---|---|
-| "Instalá / levantá / deployá un Superagent" (Railway o Docker) | [.claude/skills/instalar-superagent/SKILL.md](.claude/skills/instalar-superagent/SKILL.md) — siempre con la imagen `ghcr.io/matiasbarrigadev/superagent:<versión>`, no desde el repo |
+| "Instalá / levantá / deployá un Superagent" (Railway o Docker) | [.claude/skills/instalar-superagent/SKILL.md](.claude/skills/instalar-superagent/SKILL.md). En Railway: el template <https://railway.com/deploy/superagente-en-whatsapp>. En Docker: la imagen `ghcr.io/matiasbarrigadev/superagent:<versión>`. Nunca desde el repo, salvo para desarrollar. |
 | "Cambiá / arreglá / agregá algo en el código" | [.claude/skills/desarrollar-superagent/SKILL.md](.claude/skills/desarrollar-superagent/SKILL.md) |
 | "Actualizá mi instalación" | Instalar → sección *Actualizar* |
 | "Traé lo que tengo de otro asistente" / "mudá la instalación" | [docs/IMPORTAR.md](docs/IMPORTAR.md) (paquete con ensayo, sin secretos) |

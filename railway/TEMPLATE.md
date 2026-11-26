@@ -3,7 +3,8 @@
 La instalación es un template de Railway: un botón **Deploy** crea los dos servicios (`waha` y `superagent`), sus
 volúmenes, el dominio y los secretos. Nadie escribe variables. Después se abre un link y se sigue en el panel.
 
-- **Armar el template**: una sola vez, en la cuenta de Railway del dueño (más abajo).
+- **Usarlo**: <https://railway.com/deploy/superagente-en-whatsapp> (botón **Deploy**). Es la forma recomendada.
+- **Armar el template**: una sola vez, en la cuenta de Railway del dueño (más abajo). Ya está hecho y publicado.
 - **Instalar**: Deploy → abrir el dominio → crear el Propietario → conectar Claude → escanear el QR.
 
 ## Instalar con el template
