@@ -1,0 +1,16 @@
+node_modules
+web/node_modules
+web/dist
+data
+.git
+*.log
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+grabaciones
+*.jsonl
+secretos
+.credentials.json
+test

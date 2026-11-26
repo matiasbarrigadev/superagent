@@ -1,0 +1,6 @@
+{"id":"evt_02","timestamp":1764010060000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"false_111122223333444@lid_3EB0AAAA0002","timestamp":1764010060,"from":"111122223333444@lid","fromMe":false,"source":"app",
+  "to":"5491100000001@c.us","participant":null,"body":"Buenas, quería consultar un precio","hasMedia":false,"media":null,"ack":2,"replyTo":null,
+  "_data":{"Info":{"Chat":"111122223333444@lid","Sender":"111122223333444@lid","IsFromMe":false,"IsGroup":false,"ID":"3EB0AAAA0002",
+   "Type":"text","PushName":"Ana"},"Message":{"conversation":"Buenas, quería consultar un precio"}}}}

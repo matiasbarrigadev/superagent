@@ -1,0 +1,2 @@
+{"id":"evt_09","timestamp":1764010480000,"event":"session.status","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},"payload":{"status":"WORKING"}}

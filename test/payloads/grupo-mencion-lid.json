@@ -1,0 +1,6 @@
+{"id":"evt_05","timestamp":1764010240000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"false_120363000000000001@g.us_3EB0AAAA0005_222233334444555@lid","timestamp":1764010240,"from":"120363000000000001@g.us","fromMe":false,
+  "source":"app","to":"5491100000001@c.us","participant":"222233334444555@lid","body":"@999988887777666 fijate esto","hasMedia":false,"media":null,
+  "replyTo":null,"_data":{"Info":{"Chat":"120363000000000001@g.us","Sender":"222233334444555@lid","IsGroup":true,"ID":"3EB0AAAA0005","Type":"text",
+   "PushName":"Pedro"},"Message":{"extendedTextMessage":{"text":"@999988887777666 fijate esto","contextInfo":{"mentionedJID":["999988887777666@lid"]}}}}}}

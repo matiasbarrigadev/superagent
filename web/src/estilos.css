@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { @apply bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100; }
+
+/* Fondo de conversación: tono cálido con un patrón suave de puntos (como el de WhatsApp, sin imagen). */
+.fondo-chat {
+  background-color: #efeae2;
+  background-image: radial-gradient(rgb(0 0 0 / 0.045) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+@media (prefers-color-scheme: dark) {
+  .fondo-chat {
+    background-color: #0f0e0d;
+    background-image: radial-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1.2px);
+  }
+}
+
+/* Barras de desplazamiento finas en listas y conversaciones. */
+.scroll-fino { scrollbar-width: thin; scrollbar-color: rgb(120 113 108 / 0.35) transparent; }

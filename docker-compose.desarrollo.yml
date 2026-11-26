@@ -1,0 +1,8 @@
+# Para desarrollar Superagent: en vez de la imagen publicada, construye la imagen desde este repo.
+#   docker compose -f docker-compose.yml -f docker-compose.desarrollo.yml up -d --build
+services:
+  secretos:
+    image: superagent:local
+  superagent:
+    build: .
+    image: superagent:local

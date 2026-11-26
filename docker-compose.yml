@@ -1,0 +1,79 @@
+# Superagent en tu máquina o en un servidor propio, con la imagen publicada (no hace falta clonar el repo).
+#   docker compose up -d                → panel en http://localhost:8080
+#   docker compose logs superagent      → ahí aparece el código de setup
+#   docker compose pull && docker compose up -d   → actualizar a la versión que diga SUPERAGENT_VERSION
+# Versión: SUPERAGENT_VERSION (por defecto "latest"; mejor fijar una, por ejemplo 0.3.0, y subirla cuando quieras).
+# Con HTTPS propio (dominio apuntando al servidor):
+#   SUPERAGENT_DOMINIO=agente.ejemplo.com docker compose --profile https up -d
+# Para desarrollar (construir desde este repo): docker compose -f docker-compose.yml -f docker-compose.desarrollo.yml up -d --build
+name: superagent
+
+services:
+  # Genera los secretos compartidos la primera vez y los deja en un volumen. No hay que escribir ninguno.
+  secretos:
+    image: ghcr.io/matiasbarrigadev/superagent:${SUPERAGENT_VERSION:-latest}
+    entrypoint: ["node", "/app/scripts/generar-secretos.mjs", "/secretos"]
+    command: []
+    volumes:
+      - secretos:/secretos
+    restart: "no"
+
+  waha:
+    image: devlikeapro/waha:gows-2026.9.2
+    restart: unless-stopped
+    depends_on:
+      secretos:
+        condition: service_completed_successfully
+    # Carga WAHA_API_KEY desde el volumen de secretos y sigue con el arranque normal de la imagen.
+    entrypoint: ["/usr/bin/tini", "--", "sh", "-c", "set -a; . /secretos/waha.env; set +a; exec /entrypoint.sh"]
+    environment:
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WHATSAPP_RESTART_ALL_SESSIONS: "True"
+      WAHA_DASHBOARD_ENABLED: "False"
+      WHATSAPP_SWAGGER_ENABLED: "False"
+      WAHA_PRINT_QR: "False"
+    # Sin puertos publicados: solo lo ve el gateway por la red interna.
+    volumes:
+      - waha_sesiones:/app/.sessions
+      - waha_media:/app/.media
+      - secretos:/secretos:ro
+
+  superagent:
+    image: ghcr.io/matiasbarrigadev/superagent:${SUPERAGENT_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      secretos:
+        condition: service_completed_successfully
+      waha:
+        condition: service_started
+    ports:
+      - "${SUPERAGENT_BIND:-127.0.0.1}:${SUPERAGENT_PORT:-8080}:8080"
+    environment:
+      WAHA_URL: http://waha:3000
+      SUPERAGENT_INTERNAL_URL: http://superagent:8080
+      SUPERAGENT_PUBLIC_URL: ${SUPERAGENT_PUBLIC_URL:-http://localhost:8080}
+      SUPERAGENT_SETUP_CODE: ${SUPERAGENT_SETUP_CODE:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - datos:/data
+      - secretos:/secretos:ro
+
+  # Opcional: HTTPS automático con Caddy (perfil "https").
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on: [superagent]
+    ports: ["80:80", "443:443"]
+    environment:
+      SUPERAGENT_DOMINIO: ${SUPERAGENT_DOMINIO:-}
+    command: ["caddy", "reverse-proxy", "--from", "${SUPERAGENT_DOMINIO:-localhost}", "--to", "superagent:8080"]
+    volumes:
+      - caddy_datos:/data
+
+volumes:
+  secretos:
+  waha_sesiones:
+  waha_media:
+  datos:
+  caddy_datos:

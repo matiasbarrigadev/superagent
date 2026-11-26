@@ -1,0 +1,7 @@
+{"id":"evt_07","timestamp":1764010360000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"false_5491122223333@c.us_3EB0AAAA0007","timestamp":1764010360,"from":"5491122223333@c.us","fromMe":false,"source":"app",
+  "to":"5491100000001@c.us","participant":null,"body":"te paso el presupuesto","hasMedia":true,
+  "media":{"url":"http://localhost:3000/api/files/default/3EB0AAAA0007.pdf","mimetype":"application/pdf","filename":"presupuesto final.pdf","error":null},
+  "replyTo":null,"_data":{"Info":{"Chat":"5491122223333@s.whatsapp.net","Sender":"5491122223333@s.whatsapp.net","IsGroup":false,"ID":"3EB0AAAA0007",
+   "Type":"media","PushName":"Juan"},"Message":{"documentMessage":{"caption":"te paso el presupuesto","mimetype":"application/pdf"}}}}}

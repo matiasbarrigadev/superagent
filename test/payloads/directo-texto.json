@@ -1,0 +1,6 @@
+{"id":"evt_01","timestamp":1764010000000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"false_5491122223333@c.us_3EB0AAAA0001","timestamp":1764010000,"from":"5491122223333@s.whatsapp.net","fromMe":false,"source":"app",
+  "to":"5491100000001@c.us","participant":null,"body":"Hola, ¿cómo va?","hasMedia":false,"media":null,"ack":2,"replyTo":null,
+  "_data":{"Info":{"Chat":"5491122223333@s.whatsapp.net","Sender":"5491122223333:12@s.whatsapp.net","IsFromMe":false,"IsGroup":false,
+   "ID":"3EB0AAAA0001","Type":"text","PushName":"Juan","Timestamp":"2026-11-24T19:00:00Z"},"Message":{"conversation":"Hola, ¿cómo va?"}}}}

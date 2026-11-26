@@ -1,0 +1,7 @@
+{"id":"evt_04","timestamp":1764010180000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"false_120363000000000001@g.us_3EB0AAAA0004_5491144445555@c.us","timestamp":1764010180,"from":"120363000000000001@g.us","fromMe":false,
+  "source":"app","to":"5491100000001@c.us","participant":"5491144445555@c.us","body":"@5491100000001 ¿me pasás el resumen de la semana?","hasMedia":false,
+  "media":null,"replyTo":null,"_data":{"Info":{"Chat":"120363000000000001@g.us","Sender":"5491144445555@s.whatsapp.net","IsGroup":true,"ID":"3EB0AAAA0004",
+   "Type":"text","PushName":"Laura"},"Message":{"extendedTextMessage":{"text":"@5491100000001 ¿me pasás el resumen de la semana?",
+   "contextInfo":{"mentionedJID":["5491100000001@s.whatsapp.net"]}}}}}}

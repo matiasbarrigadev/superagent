@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d5e57"/>
+      <stop offset="1" stop-color="#14b17d"/>
+    </linearGradient>
+    <linearGradient id="chispa" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d5e57"/>
+      <stop offset="1" stop-color="#14a374"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#fondo)"/>
+  <!-- Globo de conversación -->
+  <path d="M256 104c-90 0-160 60-160 138 0 40 18 75 48 100l-14 58c-2 9 7 16 15 12l64-32c15 4 31 6 47 6 90 0 160-60 160-144S346 104 256 104z" fill="#ffffff"/>
+  <!-- Chispa del agente -->
+  <path d="M256 160c6 40 22 62 62 76-40 14-56 36-62 76-6-40-22-62-62-76 40-14 56-36 62-76z" fill="url(#chispa)"/>
+  <circle cx="338" cy="168" r="14" fill="#14a374"/>
+  <circle cx="178" cy="310" r="10" fill="#0d5e57" opacity=".85"/>
+</svg>

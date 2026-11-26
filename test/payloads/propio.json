@@ -1,0 +1,6 @@
+{"id":"evt_08","timestamp":1764010420000,"event":"message.any","session":"default","metadata":{},"engine":"GOWS",
+ "me":{"id":"5491100000001@c.us","pushName":"Agente"},
+ "payload":{"id":"true_5491122223333@c.us_3EB0BBBB0002","timestamp":1764010420,"from":"5491100000001@c.us","fromMe":true,"source":"api",
+  "to":"","participant":null,"body":"¡Hola Juan! Todo bien, ¿en qué te ayudo?","hasMedia":false,"media":null,"replyTo":null,
+  "_data":{"Info":{"Chat":"5491122223333@s.whatsapp.net","Sender":"5491100000001@s.whatsapp.net","IsFromMe":true,"IsGroup":false,"ID":"3EB0BBBB0002",
+   "Type":"text"},"Message":{"conversation":"¡Hola Juan! Todo bien, ¿en qué te ayudo?"}}}}
