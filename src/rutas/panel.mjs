@@ -7,6 +7,7 @@ import { SECCIONES } from '../servicios/memoria.mjs';
 import { auditar } from '../db/index.mjs';
 import { json } from '../util.mjs';
 import { CATALOGO } from '../conectores/servicio.mjs';
+import { CLAVES_PROVEEDOR } from '../engine/opencode.mjs';
 
 const AJUSTES_EDITABLES = {
   nombre_agente: (v) => (v == null || v === '' ? null : String(v).trim().slice(0, 40)),
@@ -117,6 +118,29 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     auditar(db, 'ajustes.editar', { actor: c.get('sesion').email, detalle: Object.keys(b) });
     return c.json({ ok: true });
   });
+  // --- Motores: qué motor corre cada tipo de conversación, respaldo, topes de gasto y credenciales.
+  app.get('/api/motores', (c) => c.json({
+    ...nucleo.motores.estado(),
+    codex: nucleo.cuentaCodex?.estado() ?? null,
+    // Las claves que usan los motores y si ya están cargadas (nunca el valor).
+    claves: (() => {
+      const hay = new Set(nucleo.entorno.nombres());
+      const lista = [['ANTHROPIC_API_KEY', 'claude-api', 'Anthropic'], ['CODEX_API_KEY', 'codex', 'OpenAI'], ['GEMINI_API_KEY', 'gemini', 'Google AI Studio'],
+        ...Object.entries(CLAVES_PROVEEDOR).filter(([p]) => p !== 'opencode').map(([p, v]) => [v, 'opencode', p])];
+      return lista.map(([nombre, motor, proveedor]) => ({ nombre, motor, proveedor, cargada: hay.has(nombre) }));
+    })(),
+    modelosClaude: db.prepare('SELECT tipo_corrida, modelo, esfuerzo FROM ajustes_modelo').all(),
+  }));
+  app.put('/api/motores', async (c) => {
+    try { nucleo.motores.configurar(await cuerpo(c)); } catch (e) { return c.json({ error: e.message }, 400); }
+    auditar(db, 'motores.configurar', { actor: c.get('sesion').email });
+    return c.json({ ok: true, ...nucleo.motores.estado() });
+  });
+  app.post('/api/motores/codex/login', async (c) => {
+    try { return c.json(await nucleo.cuentaCodex.iniciarLogin()); } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+  app.delete('/api/motores/codex', (c) => { nucleo.cuentaCodex.desconectar(); auditar(db, 'motores.codex_desconectar', { actor: c.get('sesion').email }); return c.json({ ok: true }); });
+
   app.patch('/api/modelos/:tipo', async (c) => {
     const { modelo, esfuerzo } = await cuerpo(c);
     const m = String(modelo ?? '').trim();
@@ -534,4 +558,4 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
 }
 
 export const PREFIJOS_PANEL = ['/api/resumen', '/api/personas', '/api/roles', '/api/ajustes', '/api/modelos', '/api/equipo', '/api/chats', '/api/chat', '/api/inbox',
-  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes'];
+  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes', '/api/motores'];

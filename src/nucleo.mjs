@@ -29,6 +29,8 @@ import { crearServidorMcp } from './mcp/servidor.mjs';
 import { crearArmador } from './engine/contexto.mjs';
 import { crearAdaptadorClaude } from './engine/claude.mjs';
 import { crearAdaptadorOpenCode } from './engine/opencode.mjs';
+import { crearAdaptadorCodex, crearCuentaCodex } from './engine/codex.mjs';
+import { crearAdaptadorGemini } from './engine/gemini.mjs';
 import { crearEjecutorComun } from './engine/ejecutor.mjs';
 import { crearMotores } from './engine/motores.mjs';
 import { crearMotor } from './engine/motor.mjs';
@@ -189,14 +191,19 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
   // Apps del agente publicadas en /apps/<nombre>/ (el proxy está en server.mjs).
   const apps = crearApps({ db, config, aislamiento: ais, entorno, pausada: () => db.prepare('SELECT estado FROM cuentas WHERE id = 1').get()?.estado === 'pausada', reloj, log });
   const paquetes = crearPaquetes({ db, roles, memoria, numeros, entorno, procedimientos, ajustes, reloj });
-  // Motores: Claude (suscripción o clave de API) y OpenCode (otros proveedores). Cada corrida elige el suyo.
+  // Motores: Claude (suscripción o clave de API), Codex (ChatGPT o clave), Gemini y OpenCode (otros proveedores).
+  // Cada corrida elige el suyo.
+  const cuentaCodex = crearCuentaCodex({ config, ajustes, bin: config.codex?.bin ?? 'codex', log });
   const adaptadores = {
     claude: crearAdaptadorClaude({ cuenta: cuentaClaude }),
     'claude-api': crearAdaptadorClaude({ cuenta: cuentaClaude, credencial: 'api' }),
     opencode: crearAdaptadorOpenCode({ bin: config.opencode?.bin ?? 'opencode', clave: (n) => entorno.valor(n), dirConfigVacio: path.join(config.dataDir ?? '.', 'opencode-config') }),
+    codex: crearAdaptadorCodex({ bin: config.codex?.bin ?? 'codex', clave: (n) => entorno.valor(n), cuenta: cuentaCodex }),
+    gemini: crearAdaptadorGemini({ bin: config.gemini?.bin ?? 'gemini', clave: (n) => entorno.valor(n), dirSistema: config.gemini?.dirSistema ?? path.join(config.dataDir ?? '.', 'gemini-sistema') }),
   };
-  const motores = crearMotores({ ajustes, adaptadores, cuenta: cuentaClaude });
-  const herramientas = crearHerramientas({ db, motores, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  const motores = crearMotores({ ajustes, adaptadores, cuenta: cuentaClaude, reloj,
+    gasto: (motor, desde) => db.prepare('SELECT COALESCE(SUM(costo_usd), 0) AS g FROM corridas WHERE credencial_usada = ? AND inicio >= ?').get(motor, desde).g });
+  const herramientas = crearHerramientas({ db, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
   const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
@@ -276,7 +283,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

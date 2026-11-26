@@ -4,7 +4,7 @@
 //
 // adaptador = {
 //   id, nombre,
-//   preparar({ spec, lugar, aislamiento, sesion, nueva }) → { file, args, env, stdin, archivoMcp }
+//   preparar({ spec, lugar, aislamiento, sesion, nueva }) → { file, args, env, stdin, archivoMcp, alTerminar, sinCosto }
 //   lector() → { linea(texto, r), stderr(texto, r) → tipoError para cortar | null, cerrar(r, { codigo, err }) }
 //   clasificarError(texto, codigo) → sin_sesion | limite | sesion_perdida | otro
 //   puedeNegar: herramientas (nombres de Claude Code) que el motor sabe sacar de verdad
@@ -43,7 +43,12 @@ export function crearEjecutorComun({ adaptadores, aislamiento, lanzar = spawnNod
     const comoUsuario = aislamiento.activo ? { uid: lugar.usuario.uid, gid: lugar.usuario.gid } : {};
     const lector = ad.lector();
     return new Promise((resolve) => {
-      const fin = (r) => { aislamiento.terminar(lugar, { archivoMcp: c.archivoMcp ?? null }); resolve({ ...r, motor: ad.id, lugar }); };
+      const fin = (r) => {
+        try { c.alTerminar?.(r); } catch (e) { log.warn?.('[corrida] al terminar', e.message); }
+        if (c.sinCosto && r.uso) r.uso.costo = null;
+        aislamiento.terminar(lugar, { archivoMcp: c.archivoMcp ?? null });
+        resolve({ ...r, motor: ad.id, lugar });
+      };
       let hijo;
       try {
         hijo = lanzar(c.file, c.args, { env: c.env, cwd: lugar.trabajo, ...comoUsuario, windowsHide: true });

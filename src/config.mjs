@@ -61,5 +61,13 @@ export function cargarConfig(env = process.env) {
     opencode: {
       bin: env.OPENCODE_BIN ?? 'opencode',
     },
+    codex: {
+      bin: env.CODEX_BIN ?? 'codex',
+    },
+    gemini: {
+      bin: env.GEMINI_BIN ?? 'gemini',
+      // Carpeta de root para los settings de sistema de Gemini (no la acepta si otro usuario puede escribirla).
+      dirSistema: env.GEMINI_SISTEMA_DIR ?? (process.platform === 'win32' ? null : '/etc/superagent/gemini'),
+    },
   };
 }

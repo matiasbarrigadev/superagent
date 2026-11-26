@@ -27,4 +27,5 @@ export async function api(ruta, { method = 'GET', body } = {}) {
 
 export const post = (ruta, body) => api(ruta, { method: 'POST', body });
 export const patch = (ruta, body) => api(ruta, { method: 'PATCH', body });
+export const put = (ruta, body) => api(ruta, { method: 'PUT', body });
 export const borrar = (ruta) => api(ruta, { method: 'DELETE', body: {} });

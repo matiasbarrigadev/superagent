@@ -5,7 +5,7 @@ import { api, post } from '../api.js';
 import { useDatos } from '../hooks.js';
 import { Avatar } from '../components/Mensajes.jsx';
 import {
-  IconoAgente, IconoBandeja, IconoBitacora, IconoCerrar, IconoChat, IconoClientes, IconoConexiones, IconoCuenta, IconoInicio, IconoMenu, IconoPersonas, IconoSalir,
+  IconoAgente, IconoBandeja, IconoBitacora, IconoCerrar, IconoChat, IconoClientes, IconoConexiones, IconoCuenta, IconoInicio, IconoMenu, IconoMotores, IconoPersonas, IconoSalir,
 } from '../components/iconos.jsx';
 import Inicio from './Inicio.jsx';
 import Bandeja from './Bandeja.jsx';
@@ -16,6 +16,7 @@ import Agente from './Agente.jsx';
 import Conexiones from './Conexiones.jsx';
 import Clientes from './Clientes.jsx';
 import Bitacora from './Bitacora.jsx';
+import Motores from './Motores.jsx';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
 
@@ -30,6 +31,7 @@ const SECCIONES = [
   { id: 'bitacora', nombre: 'Bitácora', Icono: IconoBitacora, requiere: 'bitacora' },
   { separador: 'Configuración' },
   { id: 'agente', nombre: 'Agente', Icono: IconoAgente },
+  { id: 'motores', nombre: 'Motores de IA', Icono: IconoMotores },
   { id: 'conexiones', nombre: 'Conexiones', Icono: IconoConexiones, requiere: 'conexiones' },
   { id: 'ajustes', nombre: 'Cuenta', Icono: IconoCuenta, requiere: 'libre' },
 ];
@@ -199,6 +201,7 @@ export default function Panel({ usuario, secciones, version, alSalir }) {
               {seccion === 'clientes' && <Encabezado titulo="Clientes" texto="Cada cliente con su rol, su autonomía y su memoria."><Clientes /></Encabezado>}
               {seccion === 'bitacora' && <Encabezado titulo="Bitácora" texto="Lo que se aprobó, rechazó o decidió con el agente."><Bitacora /></Encabezado>}
               {seccion === 'agente' && <Encabezado titulo="Agente" texto="Modelos, grupos, rutinas, entradas y reglas de contacto."><Agente /></Encabezado>}
+              {seccion === 'motores' && <Encabezado titulo="Motores de IA" texto="Claude, Codex, Gemini y OpenCode: quién atiende cada conversación, el respaldo, los topes de gasto y las claves."><Motores /></Encabezado>}
               {seccion === 'conexiones' && <Encabezado titulo="Conexiones" texto="GitHub, proyectos y conectores que el agente puede usar."><Conexiones /></Encabezado>}
               {seccion === 'ajustes' && <Encabezado titulo="Cuenta" texto="Tu acceso al panel y la seguridad de la instalación."><Ajustes usuario={usuario} version={version} /></Encabezado>}
             </div>

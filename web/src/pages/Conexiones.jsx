@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, borrar, patch, post } from '../api.js';
 import { useAccion, useDatos } from '../hooks.js';
-import { AreaTexto, Aviso, Boton, Campo, Estado, fechaCorta, Interruptor, Selector, Tarjeta, Vacio } from '../components/ui.jsx';
+import { AreaTexto, Aviso, Boton, Campo, Estado, fechaCorta, Interruptor, Selector, Tabla, Tarjeta, Vacio } from '../components/ui.jsx';
 
 const ESTADOS = { activa: ['Conectado', 'ok'], pendiente: ['Falta autorizar', 'espera'], error: ['Con problemas', 'error'], desconectada: ['Desconectado', 'neutro'] };
 
@@ -228,17 +228,17 @@ function Variables() {
         {error && <div className="mt-3"><Aviso>{error}</Aviso></div>}
         {ok && <div className="mt-3"><Aviso tipo="ok">{ok}</Aviso></div>}
         {vars.length > 0 && (
-          <ul className="mt-5 divide-y divide-stone-200 rounded-xl border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
-            {vars.map((v) => (
-              <li key={v.nombre} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-sm">{v.nombre}</p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">{v.descripcion ? `${v.descripcion} · ` : ''}{fechaCorta(v.guardada)}</p>
-                </div>
-                <Boton variante="fantasma" cargando={cargando === v.nombre} onClick={correr(v.nombre, async () => { await borrar(`/api/entorno/${v.nombre}`); cargar(); })}>Borrar</Boton>
-              </li>
-            ))}
-          </ul>
+          <Tabla
+            className="mt-5"
+            filas={vars}
+            claveFila={(v) => v.nombre}
+            columnas={[
+              { clave: 'nombre', titulo: 'Variable', principal: true, render: (v) => <code className="font-mono text-sm">{v.nombre}</code> },
+              { clave: 'descripcion', titulo: 'Para qué', render: (v) => <span className="text-stone-600 dark:text-stone-400">{v.descripcion || '—'}</span> },
+              { clave: 'guardada', titulo: 'Guardada', render: (v) => <span className="whitespace-nowrap text-stone-600 dark:text-stone-400">{fechaCorta(v.guardada)}</span> },
+              { clave: 'acciones', titulo: '', alinear: 'derecha', render: (v) => <Boton variante="fantasma" cargando={cargando === v.nombre} onClick={correr(v.nombre, async () => { await borrar(`/api/entorno/${v.nombre}`); cargar(); })}>Borrar</Boton> },
+            ]}
+          />
         )}
       </Tarjeta>
     </div>

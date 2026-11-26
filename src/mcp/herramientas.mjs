@@ -62,9 +62,11 @@ const PANEL_FUERA = [/^\/api\/(auth|setup|recuperar|invitacion|estado)(\/|$)/, /
 // Los secretos se cargan con pedir_variable (link al panel): nunca pasan por el chat.
 export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((re) => re.test(ruta)) && !(metodo === 'POST' && /^\/api\/entorno\/?$/.test(ruta))
   // Sumar o quitar un número de WhatsApp es vincular: se hace en el panel (su política, conversando).
-  && !(metodo !== 'GET' && /^\/api\/whatsapp\/numeros(\/|$)/.test(ruta));
+  && !(metodo !== 'GET' && /^\/api\/whatsapp\/numeros(\/|$)/.test(ruta))
+  // Los motores se cambian con configurar_motores (ficha y confirmación en otro mensaje).
+  && !(metodo !== 'GET' && /^\/api\/motores(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, motores = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -946,21 +948,30 @@ export function crearHerramientas({ db, motores = null, numeros = null, paquetes
     },
 
     configurar_motores: {
-      descripcion: 'Solo el Propietario, en su charla: qué motor de IA corre cada tipo de conversación. Tipos: propietario (su charla), equipo (charlas internas y grupos), terceros (clientes y externos), trabajos, rutinas, y defecto. Motores: claude (su suscripción), claude-api (clave ANTHROPIC_API_KEY, por uso), opencode (DeepSeek, MiniMax, Kimi, Qwen, OpenRouter… con modelo "proveedor/modelo" y la clave de ese proveedor, por ejemplo DEEPSEEK_API_KEY). "ver" muestra cómo está y qué falta. "cambiar" (cambios: { tipo: { motor, modelo } } o { tipo: null } para volver al de por defecto) primero muestra la ficha y pide confirmación en otro mensaje (repetí con confirmado: true). Las claves faltantes pedilas con pedir_variable.',
+      descripcion: 'Solo el Propietario, en su charla: qué motor de IA corre cada tipo de conversación, el respaldo automático y los topes de gasto. Tipos: propietario (su charla), equipo (charlas internas y grupos), terceros (clientes y externos), trabajos, rutinas, y defecto. Motores: claude (su suscripción), claude-api (clave ANTHROPIC_API_KEY, por uso), codex (su cuenta de ChatGPT, o CODEX_API_KEY), gemini (GEMINI_API_KEY de Google AI Studio, con capa gratis), opencode (DeepSeek, MiniMax, Kimi, Qwen, OpenRouter… con modelo "proveedor/modelo" y la clave de ese proveedor, por ejemplo DEEPSEEK_API_KEY). "ver" muestra cómo está, qué falta y lo gastado. "cambiar" (cambios: { tipo: { motor, modelo } | null, respaldo: [{ motor, modelo }, …] (en orden; [] o null lo apaga), topes: { motor: { dia, mes } en dólares | null } }) primero muestra la ficha y pide confirmación en otro mensaje (repetí con confirmado: true). "conectar_chatgpt" manda el link y el código para conectar su cuenta de ChatGPT a Codex. Las claves faltantes pedilas con pedir_variable.',
       esquema: {
         type: 'object',
         properties: {
-          accion: { type: 'string', enum: ['ver', 'cambiar'] },
-          cambios: { type: 'object', description: 'Por tipo: { "motor": "opencode", "modelo": "deepseek/deepseek-chat" }, o null para volver al de por defecto.' },
+          accion: { type: 'string', enum: ['ver', 'cambiar', 'conectar_chatgpt'] },
+          cambios: { type: 'object', description: 'Por tipo: { "motor": "opencode", "modelo": "deepseek/deepseek-chat" } o null para volver al de por defecto; "respaldo": lista en orden; "topes": { "opencode": { "dia": 5, "mes": 50 } }.' },
           confirmado: { type: 'boolean', description: 'true solo después de que el Propietario confirme la ficha en un mensaje nuevo.' },
         },
         required: ['accion'],
       },
-      ejecutar(ctx, { accion, cambios = null, confirmado = false }) {
+      async ejecutar(ctx, { accion, cambios = null, confirmado = false }) {
         if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, elige los motores.');
         if (!motores) throw new ErrorHerramienta('Esta instalación no maneja otros motores.');
         if (accion === 'ver') return `Motores por tipo de conversación:
 ${motores.ficha()}`;
+        if (accion === 'conectar_chatgpt') {
+          if (!cuentaCodex) throw new ErrorHerramienta('Codex no está disponible en esta instalación.');
+          let l;
+          try {
+            l = await cuentaCodex.iniciarLogin({ alTerminar: (ok) => despertarPropietarios?.({ origen: 'codex', texto: ok ? '[Codex conectado] La cuenta de ChatGPT quedó conectada: ya se puede usar el motor codex.' : '[Codex sin conectar] El login de ChatGPT terminó sin completarse (venció o se canceló).' }) });
+          } catch (e) { throw new ErrorHerramienta(e.message); }
+          auditar(db, 'motores.codex_login', { actor: String(ctx.personaId ?? '') });
+          return `Pasale al Propietario estos pasos: abrir ${l.url} , entrar con su cuenta de ChatGPT y escribir el código ${l.codigo} (vence en 15 minutos). Avisale que no lo comparta con nadie. Cuando termine, te llega [Codex conectado].`;
+        }
         if (accion !== 'cambiar') throw new ErrorHerramienta('Acción desconocida.');
         let v;
         try { v = motores.validar(cambios); } catch (e) { throw new ErrorHerramienta(e.message); }

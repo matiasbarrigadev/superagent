@@ -34,6 +34,10 @@ ARG CLAUDE_CODE_VERSION=2.1.331
 # OpenCode (motor para DeepSeek, MiniMax, OpenRouter…): versión 1 fija. La 2 cambió la config y no deja cargar
 # claves sin una terminal interactiva; se actualiza a mano después de probarla.
 ARG OPENCODE_VERSION=1.19.6
+# Codex (cuenta de ChatGPT o clave de OpenAI) y Gemini CLI: también fijas, probadas contra un modelo falso que
+# registra qué herramientas ofrece cada una (scripts/verificar-motores.mjs).
+ARG CODEX_VERSION=0.172.0
+ARG GEMINI_CLI_VERSION=0.71.1
 ARG PLAYWRIGHT_MCP_VERSION=0.0.84
 # CLIs de la publicación (etapa 8c); gh viene de apt.
 ARG WRANGLER_VERSION=4.158.0
@@ -54,12 +58,13 @@ RUN apt-get update \
 COPY --from=whisper /opt/whisper /opt/whisper
 
 RUN npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
-      "opencode-ai@${OPENCODE_VERSION}" "wrangler@${WRANGLER_VERSION}" "vercel@${VERCEL_VERSION}" "supabase@${SUPABASE_VERSION}" \
+      "opencode-ai@${OPENCODE_VERSION}" "@openai/codex@${CODEX_VERSION}" "@google/gemini-cli@${GEMINI_CLI_VERSION}" "wrangler@${WRANGLER_VERSION}" "vercel@${VERCEL_VERSION}" "supabase@${SUPABASE_VERSION}" \
  && npm cache clean --force
 
 # "agente" solo corre el login de Claude. Cada conversación corre con su propio usuario, creado al vuelo.
 RUN useradd --create-home --uid 1001 --shell /bin/bash agente \
- && mkdir -p /data && chmod 0711 /data
+ && mkdir -p /data && chmod 0711 /data \
+ && mkdir -p /etc/superagent/gemini && chmod 0755 /etc/superagent /etc/superagent/gemini
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

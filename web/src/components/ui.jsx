@@ -73,9 +73,9 @@ const COLORES_ESTADO = {
   neutro: 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300',
 };
 
-export function Estado({ tono = 'neutro', children }) {
+export function Estado({ tono = 'neutro', children, title }) {
   return (
-    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', COLORES_ESTADO[tono])}>
+    <span title={title} className={cx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium', COLORES_ESTADO[tono])}>
       <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
       {children}
     </span>
@@ -160,3 +160,85 @@ export function Vacio({ children }) {
 }
 
 export const fechaCorta = (ms) => (ms ? new Date(ms).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+
+/**
+ * Tabla: en pantallas anchas es una tabla; en el teléfono, cada fila es una tarjeta con "título: valor".
+ * columnas: [{ clave, titulo, render?(fila), alinear?: 'derecha', principal?: true (va de título en el teléfono),
+ * soloAncho?: true (no se muestra en el teléfono) }].
+ */
+const CORTES = { md: ['md:table', 'md:hidden'], lg: ['lg:table', 'lg:hidden'], xl: ['xl:table', 'xl:hidden'] };
+
+export function Tabla({ columnas, filas, claveFila = (f, i) => f.id ?? i, vacio = 'Nada por acá todavía.', pie = null, className, corte = 'lg' }) {
+  if (!filas?.length) return <Vacio>{vacio}</Vacio>;
+  const valor = (c, f) => (c.render ? c.render(f) : f[c.clave] ?? '—');
+  const principal = columnas.find((c) => c.principal) ?? columnas[0];
+  return (
+    <div className={cx('overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800', className)}>
+      <table className={cx('hidden w-full border-collapse text-sm', CORTES[corte][0])}>
+        <thead className="bg-stone-50 dark:bg-stone-950/60">
+          <tr>
+            {columnas.map((c) => (
+              <th key={c.clave} scope="col" className={cx('border-b border-stone-200 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:text-stone-400', c.alinear === 'derecha' && 'text-right', c.ancho)}>
+                {c.titulo}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-stone-100 dark:divide-stone-800/70">
+          {filas.map((f, i) => (
+            <tr key={claveFila(f, i)} className="align-middle transition hover:bg-stone-50/70 dark:hover:bg-stone-800/30">
+              {columnas.map((c) => (
+                <td key={c.clave} className={cx('px-4 py-3', c.alinear === 'derecha' && 'text-right tabular-nums')}>{valor(c, f)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        {pie && <tfoot className="border-t border-stone-200 bg-stone-50/60 dark:border-stone-800 dark:bg-stone-950/40"><tr><td colSpan={columnas.length} className="px-4 py-2.5">{pie}</td></tr></tfoot>}
+      </table>
+      <ul className={cx('divide-y divide-stone-100 dark:divide-stone-800', CORTES[corte][1])}>
+        {filas.map((f, i) => (
+          <li key={claveFila(f, i)} className="flex flex-col gap-2 px-4 py-3 text-sm">
+            <div className="font-medium">{valor(principal, f)}</div>
+            <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5">
+              {columnas.filter((c) => c !== principal && !c.soloAncho).map((c) => (
+                <div key={c.clave} className="contents">
+                  <dt className="text-xs text-stone-500 dark:text-stone-400">{c.titulo}</dt>
+                  <dd className="min-w-0">{valor(c, f)}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+        {pie && <li className="px-4 py-2.5">{pie}</li>}
+      </ul>
+    </div>
+  );
+}
+
+/** Campo compacto para usar dentro de tablas (sin etiqueta visible: va con aria-label). */
+export function CampoChico({ className, ...props }) {
+  return <input {...props} className={cx('block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 dark:border-stone-700 dark:bg-stone-950', className)} />;
+}
+
+/** Etiqueta chica (badge) de un color, para tipos y categorías. */
+export function Chip({ tono = 'neutro', children, title }) {
+  const t = {
+    neutro: 'bg-stone-100 text-stone-700 ring-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:ring-stone-700',
+    verde: 'bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900',
+    azul: 'bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:ring-sky-900',
+    ambar: 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900',
+    violeta: 'bg-violet-50 text-violet-800 ring-violet-200 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-900',
+    rojo: 'bg-red-50 text-red-800 ring-red-200 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-900',
+  }[tono];
+  return <span title={title} className={cx('inline-flex items-center whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset', t)}>{children}</span>;
+}
+
+/** Título de sección dentro de una tarjeta, con descripción opcional. */
+export function Subtitulo({ children, ayuda }) {
+  return (
+    <div className="mb-3">
+      <h3 className="text-sm font-semibold">{children}</h3>
+      {ayuda && <p className="mt-0.5 text-sm text-stone-600 dark:text-stone-400">{ayuda}</p>}
+    </div>
+  );
+}

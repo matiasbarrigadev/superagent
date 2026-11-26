@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { borrar, patch, post } from '../api.js';
 import { useAccion, useDatos } from '../hooks.js';
-import { Aviso, Boton, Campo, Estado, Interruptor, Selector, Tarjeta, Vacio } from '../components/ui.jsx';
+import { Aviso, Boton, Campo, Chip, Estado, Interruptor, Selector, Tabla, Tarjeta } from '../components/ui.jsx';
 import AccesoPanel from '../components/AccesoPanel.jsx';
 
 const TEXTO = {
@@ -67,26 +67,31 @@ export default function Personas({ usuario, secciones }) {
             opciones={roles.map((r) => ({ valor: r.id, texto: r.nombre }))} />
           <Boton cargando={cargando === 'alta'}>Dar de alta</Boton>
         </form>
-        {pers.datos?.personas?.length ? (
-          <ul className="flex flex-col divide-y divide-stone-200 text-sm dark:divide-stone-800">
-            {pers.datos.personas.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div>
-                  <span className="font-medium">{p.nombre || 'Sin nombre'}</span>
-                  {p.telefono && <span className="ml-2 text-stone-500">+{p.telefono}</span>}
-                  {!p.alta_manual && <span className="ml-2"><Estado>Escribió sin alta</Estado></span>}
-                  {p.panel && <span className="ml-2"><Estado tono="ok">Entra al panel</Estado></span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Selector aria-label={`Rol de ${p.nombre ?? p.telefono}`} value={String(p.rol_id)}
-                    onChange={correr(`rol${p.id}`, async (e) => { await patch(`/api/personas/${p.id}`, { rolId: Number(e.target.value) }); recargar(); })}
-                    opciones={roles.map((r) => ({ valor: r.id, texto: r.nombre }))} />
-                  {!p.panel && <Boton variante="fantasma" onClick={correr(`baja${p.id}`, async () => { await borrar(`/api/personas/${p.id}`); recargar(); })}>Dar de baja</Boton>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : <Vacio>Todavía no hay personas.</Vacio>}
+        <Tabla
+          filas={pers.datos?.personas ?? []}
+          vacio="Todavía no hay personas."
+          columnas={[
+            { clave: 'nombre', titulo: 'Persona', principal: true, render: (p) => (
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" aria-hidden="true">{(p.nombre || '?').slice(0, 1).toUpperCase()}</span>
+                <span className="font-medium">{p.nombre || 'Sin nombre'}</span>
+              </div>
+            ) },
+            { clave: 'telefono', titulo: 'WhatsApp', render: (p) => (p.telefono ? <span className="tabular-nums text-stone-600 dark:text-stone-400">+{p.telefono}</span> : '—') },
+            { clave: 'estado', titulo: 'Estado', render: (p) => (
+              <div className="flex flex-wrap gap-1">
+                {p.panel && <Chip tono="verde">Entra al panel</Chip>}
+                {!p.alta_manual ? <Chip tono="ambar">Escribió sin alta</Chip> : p.verificada ? <Chip>Verificada</Chip> : null}
+              </div>
+            ) },
+            { clave: 'rol', titulo: 'Rol', render: (p) => (
+              <Selector aria-label={`Rol de ${p.nombre ?? p.telefono}`} value={String(p.rol_id)}
+                onChange={correr(`rol${p.id}`, async (e) => { await patch(`/api/personas/${p.id}`, { rolId: Number(e.target.value) }); recargar(); })}
+                opciones={roles.map((r) => ({ valor: r.id, texto: r.nombre }))} />
+            ) },
+            { clave: 'acciones', titulo: '', alinear: 'derecha', render: (p) => (!p.panel ? <Boton variante="fantasma" onClick={correr(`baja${p.id}`, async () => { await borrar(`/api/personas/${p.id}`); recargar(); })}>Dar de baja</Boton> : null) },
+          ]}
+        />
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-stone-200 pt-4 dark:border-stone-800">
           <div>
             <p className="text-sm font-medium">Responder a números sin alta</p>
@@ -97,6 +102,34 @@ export default function Personas({ usuario, secciones }) {
         </div>
         {(error || pers.error) && <div className="mt-3"><Aviso>{error || pers.error}</Aviso></div>}
       </Tarjeta>
+
+      {rls.datos?.roles?.length > 0 && (
+        <Tarjeta titulo="Qué puede cada rol">
+          <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Todos los permisos de cada rol, en una vista. Valen igual en cualquier motor de IA. Se cambian editando el rol (abajo) o pidiéndoselo al agente.</p>
+          <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-800">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-stone-50 dark:bg-stone-950/60">
+                <tr>
+                  <th scope="col" className="sticky left-0 border-b border-stone-200 bg-stone-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:bg-stone-950 dark:text-stone-400">Permiso</th>
+                  {rls.datos.roles.map((r) => <th key={r.id} scope="col" className="whitespace-nowrap border-b border-stone-200 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-stone-500 dark:border-stone-800 dark:text-stone-400">{r.nombre}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800/70">
+                {rls.datos.roles[0].enPalabras.map((fila, i) => (
+                  <tr key={fila.nombre} className="hover:bg-stone-50/70 dark:hover:bg-stone-800/30">
+                    <th scope="row" className="sticky left-0 bg-white px-4 py-2 text-left font-normal dark:bg-stone-900">{fila.nombre}</th>
+                    {rls.datos.roles.map((r) => {
+                      const x = r.enPalabras[i];
+                      const no = x?.valor === false || x?.valor === 'no' || x?.valor === 'ninguna';
+                      return <td key={r.id} className="px-3 py-2">{no ? <span className="text-stone-400">No</span> : <Chip tono={x?.valor === true || x?.valor === 'directo' ? 'verde' : 'azul'}>{x?.texto ?? '—'}</Chip>}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Tarjeta>
+      )}
 
       <Tarjeta titulo="Roles" accion={<Boton variante="secundario" onClick={() => setEditando('nuevo')}>Rol nuevo</Boton>}>
         {editando === 'nuevo' && rls.datos && (

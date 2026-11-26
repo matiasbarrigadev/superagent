@@ -1,11 +1,13 @@
 # Motores de IA
 
-Cada conversación corre con un motor (una CLI de agente). Hoy hay tres:
+Cada conversación corre con un motor (una CLI de agente). Hay cinco:
 
 | Motor | Qué es | Cómo se paga | Qué hay que cargar |
 |---|---|---|---|
-| `claude` | Claude Code con tu suscripción | Pro / Max, sin costo extra | Panel → Claude → Conectar |
+| `claude` | Claude Code con tu suscripción | Pro / Max, sin costo extra | Panel → Inicio → Claude → Conectar |
 | `claude-api` | Claude Code con clave de API | Por uso, en dólares | `ANTHROPIC_API_KEY` |
+| `codex` | Codex CLI 0.172.0 | Tu plan de ChatGPT, o por uso con clave | Cuenta de ChatGPT (Panel → Motores de IA → Conectar ChatGPT) o `CODEX_API_KEY` |
+| `gemini` | Gemini CLI 0.71.1 | Capa gratis de Google AI Studio, después por uso | `GEMINI_API_KEY` |
 | `opencode` | [OpenCode](https://opencode.ai) 1.19.6, con el modelo que elijas | Por uso, con la clave de cada proveedor | La clave del proveedor (ver abajo) |
 
 Con cualquier motor el gateway es el mismo:
@@ -15,9 +17,28 @@ Con cualquier motor el gateway es el mismo:
 - el mismo aislamiento por usuario de Linux;
 - las mismas aprobaciones y la misma bitácora.
 
-## Elegir el motor, conversando
+## Dónde se configura
 
-Se elige uno por tipo de conversación:
+**Conversando con el agente**, por ejemplo:
+
+- "usá DeepSeek para atender a los clientes";
+- "si se acaba Claude, seguí con Gemini";
+- "ponele un tope de 5 dólares por día a OpenCode";
+- "conectá mi ChatGPT para usar Codex".
+
+El agente te muestra la ficha (cómo quedaría, qué cuesta, qué falta) y lo aplica recién cuando lo confirmás en otro
+mensaje. Si falta una clave, te manda el link del panel para cargarla: las claves nunca pasan por el chat.
+
+**En el panel → Motores de IA**, todo en tablas:
+
+- qué motor y modelo atiende cada tipo de conversación, con su estado;
+- cada motor con su credencial, lo gastado (hoy y en el mes) y su tope;
+- el respaldo automático, en orden;
+- las claves de cada motor y proveedor, para cargarlas ahí mismo.
+
+Los cambios se juntan en una barra y se guardan después de confirmarlos.
+
+## Tipos de conversación
 
 | Tipo | Qué cubre |
 |---|---|
@@ -26,21 +47,36 @@ Se elige uno por tipo de conversación:
 | `terceros` | Clientes y personas externas |
 | `trabajos` | Trabajos y sesiones de proyecto |
 | `rutinas` | Rutinas programadas |
-| `defecto` | Lo que no tenga uno propio (si no se elige nada: `claude`) |
-
-Decíselo al agente, por ejemplo "usá DeepSeek para atender a los clientes":
-
-1. Te muestra la ficha: cómo quedaría, qué cuesta y qué falta cargar.
-2. Lo aplica recién cuando lo confirmás en otro mensaje.
-3. Si falta una clave, te manda el link del panel para cargarla. Las claves nunca pasan por el chat.
 
 Al cambiar de motor, esa charla arranca una conversación nueva con la misma memoria. Las sesiones no se pasan de
 un motor a otro.
 
+## Respaldo automático
+
+Es una lista ordenada de hasta 4 motores. Si el motor de turno se queda sin plan, sin crédito o sin credencial:
+
+1. La charla sigue con el primero de la lista que pueda correr: tiene su credencial, no pasó su tope y el rol lo
+   permite.
+2. Te llega un aviso.
+3. El motor que falló queda en pausa un rato (15 minutos por límite, 5 por credencial) y después se vuelve a probar
+   solo.
+
+Sin respaldo, como antes: esas charlas esperan en cola.
+
+## Topes de gasto
+
+Por motor, en dólares por día y por mes. Se pueden poner a los motores que informan el precio de cada corrida:
+`claude-api` y `opencode`. Codex con clave y Gemini no lo informan; su gasto se ve en la cuenta del proveedor.
+
+Con el tope alcanzado:
+
+- esas charlas no corren y esperan;
+- te llega un aviso;
+- si hay respaldo, siguen con el respaldo.
+
 ## Claves de OpenCode
 
-El modelo va como `proveedor/modelo`. Cada proveedor usa su propia clave, que se carga en
-*Panel → Variables de entorno*:
+El modelo va como `proveedor/modelo`. Cada proveedor usa su propia clave:
 
 | Proveedor | Ejemplo de modelo | Clave |
 |---|---|---|
@@ -52,35 +88,42 @@ El modelo va como `proveedor/modelo`. Cada proveedor usa su propia clave, que se
 | Gratis de OpenCode | `opencode/<modelo>-free` | ninguna |
 
 Los nombres exactos de los modelos están en [models.dev](https://models.dev). Los gratis de OpenCode sirven para
-probar, pero tienen un tope diario. Cuando se llega, esas charlas esperan y te llega un aviso.
+probar, pero tienen un tope diario.
 
 ## Seguridad
 
-- **Si un motor no puede sacar una herramienta que el rol no tiene, no corre para ese rol: corre Claude.** Lo decide
-  el gateway, no el modelo. OpenCode sí puede sacar todas: terminal, edición, lectura, web y subagentes.
-- OpenCode no lee nada que el agente pueda escribir:
-  - la config va armada por el gateway en cada corrida;
-  - la config del proyecto se ignora;
-  - la carpeta de config global es del gateway y está vacía.
-- Nada se comparte públicamente: `share` está apagado.
-- No se le pregunta nada a una persona en el medio de una corrida: sin la herramienta de preguntas, y con los
-  permisos de "preguntar" en negado.
-- `ANTHROPIC_API_KEY` llega solo a las corridas de `claude-api`. Con la suscripción se saca del entorno, porque si
-  no le gana al token.
-- La clave de cada proveedor llega solo a las corridas que usan ese proveedor. Un rol con terminal puede leer las
-  variables de su propio entorno: lo mismo pasa hoy con el token de Claude.
+**Si un motor no puede sacar una herramienta que el rol no tiene, no corre para ese rol: corre Claude.** Lo decide
+el gateway, no el modelo. Cada adaptador tiene un test que verifica que la config que arma niega lo que el rol no
+tiene. Las restricciones de Codex y Gemini se probaron contra un modelo falso que registra qué herramientas le
+ofrece cada CLI (`scripts/verificar-motores.mjs`).
+
+Ningún motor lee una config que el agente pueda escribir:
+
+| Motor | Cómo |
+|---|---|
+| OpenCode | Config inline, sin config del proyecto, carpeta global vacía de root |
+| Codex | La config se reescribe en cada corrida y la del proyecto no se usa |
+| Gemini | Lo que importa va en un archivo de "sistema" que le gana a todo y está en una carpeta de root. Si Gemini lo ignorara, la corrida no sigue. La config del proyecto se borra antes de cada corrida |
+
+Nada espera a una persona en el medio de una corrida: las herramientas de preguntas están apagadas y los permisos
+de "preguntar" están negados. Ningún motor comparte sesiones públicamente, y en Codex y Gemini quedan apagados los
+plugins, los hooks, el navegador propio y la generación de imágenes.
+
+Las credenciales:
+
+- Cada credencial llega solo a las corridas de su motor. `ANTHROPIC_API_KEY` se saca del entorno de Claude con
+  suscripción, porque si no le gana al token.
+- La cuenta de ChatGPT queda cifrada en la base. Cada corrida de Codex recibe una copia que se borra al terminar, y
+  si Codex renueva el token, se guarda el nuevo.
+- Un rol con terminal puede leer las credenciales de su propio entorno. Lo mismo pasa con el token de Claude.
 
 ## Si un motor falla
 
 | Pasa | Qué hace el gateway |
 |---|---|
-| Claude con la suscripción llega al límite | Pausa todo y avisa, como siempre |
-| Otro motor se queda sin crédito, sin clave o llega a su tope | No frena a Claude. Esas charlas se reintentan cada 15 minutos y te avisa una vez cada 6 horas |
+| Claude con la suscripción llega al límite, sin respaldo | Pausa todo y avisa, como siempre |
+| Cualquier motor falla y hay respaldo | Sigue con el respaldo y avisa |
+| Otro motor se queda sin crédito o sin clave, sin respaldo | No frena a Claude. Esas charlas se reintentan cada 15 minutos y te avisa una vez cada 6 horas |
 | No hay suscripción conectada pero sí `ANTHROPIC_API_KEY` | Usa la clave, sin configurar nada |
 
-La tarjeta de consumo del panel muestra aparte el gasto real de los motores por uso de los últimos 30 días.
-
-## Próximo
-
-Codex, Gemini, el respaldo automático entre motores y los topes de gasto. El diseño está en
-[diseno/motores.md](diseno/motores.md).
+El diseño completo está en [diseno/motores.md](diseno/motores.md).

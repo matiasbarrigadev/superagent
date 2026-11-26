@@ -23,3 +23,4 @@ export const IconoAdjunto = I(<path d="m20 11.5-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.
 export const IconoCheck = I(<path d="m4 12.5 4.5 4.5L20 6" />);
 export const IconoReloj = I(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>);
 export const IconoBitacora = I(<><path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z" /><path d="M8.5 8h6M8.5 11.5h6M8.5 15h3.5" /></>);
+export const IconoMotores = I(<><rect x="4" y="4" width="16" height="16" rx="3" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>);

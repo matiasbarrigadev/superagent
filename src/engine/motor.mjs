@@ -217,8 +217,16 @@ export function crearMotor({
     const previo = Number(ajustes.get(clave)) || 0;
     if (reloj() - previo < 6 * 3_600_000) return;
     ajustes.set(clave, String(reloj()));
+    if (motivo === 'respaldo') {
+      avisos.alPropietario(`Aviso de Superagent: respaldo de motores. ${String(error ?? '').slice(0, 300)}. Se vuelve al motor de siempre solo, cuando se recupere.`, { tipo: 'aviso' });
+      return;
+    }
+    if (motivo === 'tope') {
+      avisos.alPropietario(`Aviso de Superagent: tope de gasto. ${String(error ?? '').slice(0, 300)} Las charlas que usan ese motor esperan hasta que se renueve el tope o lo subas (decímelo o cambialo en el panel → Motores).`, { tipo: 'error' });
+      return;
+    }
     const que = motivo === 'limite' ? 'se quedó sin crédito o llegó a su límite' : motivo === 'sin_binario' ? 'no está instalado en el servidor' : 'no tiene la clave o la clave no funciona';
-    avisos.alPropietario(`Aviso de Superagent: el motor ${motor} ${que}. Las charlas que corren con él quedan en espera y se reintentan cada 15 minutos (podés pedirme que use otro motor). Detalle: ${String(error ?? '').slice(0, 300)}`, { tipo: 'error' });
+    avisos.alPropietario(`Aviso de Superagent: el motor ${motor} ${que}. Las charlas que corren con él quedan en espera y se reintentan cada 15 minutos (podés pedirme que use otro motor o configurar un respaldo). Detalle: ${String(error ?? '').slice(0, 300)}`, { tipo: 'error' });
     log.warn(`[motor] ${motor} no responde (${motivo})`);
   }
 
@@ -228,12 +236,24 @@ export function crearMotor({
     marcar(seqs, 2);
     const spec = armador.armar({ tipo, chatId, personaId, mensajes, trabajo, rutina, origen, buzon });
     // Motor de esta corrida (lo elige el Propietario por tipo). Las sesiones no se cruzan entre motores.
+    const claveBase = spec.clave, modeloBase = spec.modelo;
+    const aplicarMotor = (e) => {
+      spec.motor = e.motor;
+      spec.modelo = e.modelo || modeloBase;
+      spec.clave = e.familia !== 'claude' ? `${e.familia}:${claveBase}` : claveBase;
+      if (e.nota) log.info?.(`[motor] ${e.nota}`);
+    };
     if (motores) {
       const e = motores.elegir(spec);
-      spec.motor = e.motor;
-      if (e.modelo) spec.modelo = e.modelo;
-      if (e.familia !== 'claude') spec.clave = `${e.familia}:${spec.clave}`;
-      if (e.nota) log.info?.(`[motor] ${e.nota}`);
+      // Todos los motores posibles pasaron su tope de gasto: no se corre; esa charla espera y se avisa.
+      if (e.detener) {
+        marcar(seqs, 0);
+        avisarMotor(e.motor, 'tope', e.detener);
+        if (chatId && seqs.length) programar(chatId, reloj(), 60 * 60_000);
+        return { r: { ok: false, tipoError: 'tope', error: e.detener, herramientas: [] }, ctx: null, spec, corridaId: null };
+      }
+      aplicarMotor(e);
+      if (e.respaldo) avisarMotor(e.motor, 'respaldo', e.nota);
     }
     const chat = chatId ? db.prepare('SELECT proyecto_id FROM chats WHERE id = ?').get(chatId) : null;
     // Si sigue una charla y sus herramientas cambiaron desde la última corrida (cambió el rol o sus conectores),
@@ -285,6 +305,19 @@ export function crearMotor({
       const previa = tipo === 'trabajo' ? null : sesionDe(chatId, spec.clave);
       let sid = previa ?? crypto.randomUUID();
       r = await ejecutar(spec, { sesion: sid, nueva: !previa, timeoutMs });
+      // Respaldo: el motor se quedó sin plan, crédito o credencial y hay otro configurado: sigue ese, con sesión nueva.
+      for (let i = 0; motores && i < 3 && !r.ok && ['limite', 'sin_sesion', 'sin_binario'].includes(r.tipoError); i++) {
+        motores.bloquear(spec.motor, r.tipoError);
+        const e = motores.elegir(spec);
+        if (e.detener || e.motor === spec.motor) break;
+        const de = spec.motor;
+        aplicarMotor(e);
+        avisarMotor(e.motor, 'respaldo', `${de} ${r.tipoError === 'limite' ? 'llegó a su límite' : 'no tiene credencial que funcione'}: sigo con ${e.motor}`);
+        db.prepare('UPDATE corridas SET credencial_usada = ?, modelo = ? WHERE id = ?').run(spec.motor, spec.modelo, corridaId);
+        const prev = tipo === 'trabajo' ? null : sesionDe(chatId, spec.clave);
+        sid = prev ?? crypto.randomUUID();
+        r = await ejecutar(spec, { sesion: sid, nueva: !prev, timeoutMs });
+      }
       if (!r.ok && r.tipoError === 'sesion_perdida' && previa) {
         db.prepare('DELETE FROM sesiones_claude WHERE chat_id = ? AND clave = ?').run(chatId, spec.clave);
         sid = crypto.randomUUID();
@@ -324,6 +357,7 @@ export function crearMotor({
       }
       bloqueo = null;
     } else if (['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError) && spec.motor && spec.motor !== 'claude') {
+      motores?.bloquear(spec.motor, r.tipoError);
       // Otro motor sin crédito o sin clave: no frena a Claude. Esa charla espera y el Propietario se entera una vez.
       marcar(seqs, 0);
       avisarMotor(spec.motor, r.tipoError, r.error);
@@ -441,7 +475,7 @@ export function crearMotor({
       if (r.ok) {
         sesiones.escribir(s.id, { de: 'sesion', tipo: 'respuesta', contenido: r.resultado || '(sin respuesta)', personaOrigen: persona, chatOrigen, respuestaA: ultimo.id });
         despertar({ chatId: chatOrigen, personaId: persona, texto: `[S-${s.id} ${s.nombre} respondió] ${String(r.resultado ?? '').slice(0, 6000)}`, origen: `sesion:${s.id}` });
-      } else if (pausada() || ['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError)) {
+      } else if (pausada() || ['sin_sesion', 'limite', 'sin_binario', 'tope'].includes(r.tipoError)) {
         for (const b of msgs) db.prepare("UPDATE buzon SET estado = 'pendiente' WHERE id = ?").run(b.id);
       } else {
         despertar({ chatId: chatOrigen, personaId: persona, texto: `[S-${s.id} falló] ${String(r.error ?? '').slice(0, 1000)}`, origen: `sesion:${s.id}` });
@@ -461,7 +495,7 @@ export function crearMotor({
         const listos = recogerArchivos(t, ctx);
         despertar({ chatId: t.chat_id, personaId: t.pedido_por, texto: `[${t.id} terminado] ${String(r.resultado ?? '(sin informe)').slice(0, 6000)}${listos.length ? `
 Archivos listos para mandar con enviar_archivo: ${listos.join(', ')}` : ''}`, origen: `trabajo:${t.id}` });
-      } else if (pausada() || ['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError)) {
+      } else if (pausada() || ['sin_sesion', 'limite', 'sin_binario', 'tope'].includes(r.tipoError)) {
         db.prepare("UPDATE trabajos SET estado = 'en_cola' WHERE id = ?").run(t.id);
       } else {
         db.prepare("UPDATE trabajos SET estado = 'fallido', fin = ?, resultado = ? WHERE id = ?").run(reloj(), String(r.error ?? '').slice(0, 4000), t.id);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { borrar, patch, post } from '../api.js';
 import { useAccion, useDatos } from '../hooks.js';
-import { AreaTexto, Aviso, Boton, Campo, Estado, Interruptor, Selector, Tarjeta, Vacio, fechaCorta } from '../components/ui.jsx';
+import { AreaTexto, Aviso, Boton, Campo, CampoChico, Chip, Estado, Interruptor, Selector, Tabla, Tarjeta, Vacio, fechaCorta } from '../components/ui.jsx';
 
 const TIPOS = {
   orquestador: 'Orquestador (Propietario y Colaboradores)', tercero: 'Con un Tercero', busqueda: 'Subagentes de búsqueda',
@@ -64,22 +64,25 @@ function General({ datos, recargar }) {
 
 function Modelos({ datos, recargar }) {
   const { error, correr } = useAccion();
+  const guardar = (m, cambio) => correr('m', async () => { await patch(`/api/modelos/${m.tipo_corrida}`, { modelo: m.modelo, esfuerzo: m.esfuerzo, ...cambio }); recargar(); })();
   return (
-    <Tarjeta titulo="Modelos por tipo de corrida">
-      <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">Alias como opus, sonnet o haiku toman siempre el modelo más nuevo. Qué modelos podés usar depende de tu plan de Claude.</p>
-      <ul className="flex flex-col gap-3">
-        {datos.modelos.map((m) => (
-          <li key={m.tipo_corrida} className="grid gap-2 sm:grid-cols-[1fr_9rem_9rem] sm:items-end">
-            <p className="text-sm font-medium">{TIPOS[m.tipo_corrida] ?? m.tipo_corrida}</p>
-            <Campo etiqueta="Modelo" defaultValue={m.modelo}
-              onBlur={(e) => e.target.value !== m.modelo && correr('m', async () => { await patch(`/api/modelos/${m.tipo_corrida}`, { modelo: e.target.value, esfuerzo: m.esfuerzo }); recargar(); })()} />
-            {m.tipo_corrida !== 'respaldo' ? (
-              <Selector etiqueta="Esfuerzo" value={m.esfuerzo ?? ''} opciones={ESFUERZOS}
-                onChange={(e) => correr('e', async () => { await patch(`/api/modelos/${m.tipo_corrida}`, { modelo: m.modelo, esfuerzo: e.target.value || null }); recargar(); })()} />
-            ) : <span />}
-          </li>
-        ))}
-      </ul>
+    <Tarjeta titulo="Modelos de Claude por tipo de corrida">
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">
+        Alias como opus, sonnet o haiku toman siempre el modelo más nuevo; qué modelos podés usar depende de tu plan. Para usar otro motor
+        (Codex, Gemini, DeepSeek…) en algún tipo de conversación, andá a <a href="#motores" className="font-medium text-emerald-700 underline dark:text-emerald-400">Motores de IA</a>.
+      </p>
+      <Tabla
+        filas={datos.modelos}
+        claveFila={(m) => m.tipo_corrida}
+        columnas={[
+          { clave: 'tipo', titulo: 'Corrida', principal: true, render: (m) => <span className="font-medium">{TIPOS[m.tipo_corrida] ?? m.tipo_corrida}</span> },
+          { clave: 'modelo', titulo: 'Modelo', render: (m) => <CampoChico key={m.modelo} aria-label={`Modelo de ${TIPOS[m.tipo_corrida]}`} defaultValue={m.modelo} list="modelos-claude" onBlur={(e) => e.target.value !== m.modelo && guardar(m, { modelo: e.target.value })} /> },
+          { clave: 'esfuerzo', titulo: 'Esfuerzo', render: (m) => (m.tipo_corrida !== 'respaldo'
+            ? <Selector aria-label={`Esfuerzo de ${TIPOS[m.tipo_corrida]}`} value={m.esfuerzo ?? ''} opciones={ESFUERZOS} onChange={(e) => guardar(m, { esfuerzo: e.target.value || null })} />
+            : <span className="text-stone-400">—</span>) },
+        ]}
+      />
+      <datalist id="modelos-claude">{['opus', 'sonnet', 'haiku'].map((x) => <option key={x} value={x} />)}</datalist>
       {error && <div className="mt-3"><Aviso>{error}</Aviso></div>}
     </Tarjeta>
   );
@@ -89,16 +92,19 @@ function Equipo({ datos, recargar }) {
   const { correr } = useAccion();
   return (
     <Tarjeta titulo="Equipo de subagentes">
-      <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">El agente los usa para tareas cortas. Nunca tienen más herramientas que la conversación que los llama.</p>
-      <ul className="flex flex-col divide-y divide-stone-200 dark:divide-stone-800">
-        {datos.equipo.map((e) => (
-          <li key={e.nombre} className="flex items-center justify-between gap-3 py-2">
-            <div className="text-sm"><span className="font-medium">{e.nombre}</span> <span className="text-stone-500">· {e.modelo}</span>
-              <p className="text-stone-600 dark:text-stone-400">{e.para_que}</p></div>
-            <Interruptor etiqueta={`Activar ${e.nombre}`} prendido={e.activo} alCambiar={(v) => correr('x', async () => { await patch(`/api/equipo/${e.nombre}`, { activo: v }); recargar(); })()} />
-          </li>
-        ))}
-      </ul>
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">El agente los usa para tareas cortas. Nunca tienen más herramientas que la conversación que los llama.</p>
+      <Tabla
+        filas={datos.equipo}
+        claveFila={(e) => e.nombre}
+        vacio="No hay subagentes."
+        columnas={[
+          { clave: 'nombre', titulo: 'Subagente', principal: true, render: (e) => <span className="font-medium">{e.nombre}</span> },
+          { clave: 'para_que', titulo: 'Para qué', render: (e) => <span className="text-stone-600 dark:text-stone-400">{e.para_que}</span> },
+          { clave: 'modelo', titulo: 'Modelo', render: (e) => <Chip>{e.modelo ?? 'el de la corrida'}</Chip> },
+          { clave: 'herramientas', titulo: 'Herramientas', soloAncho: true, render: (e) => <div className="flex flex-wrap gap-1">{e.herramientas.map((h) => <Chip key={h} tono="azul">{h}</Chip>)}</div> },
+          { clave: 'activo', titulo: 'Activo', alinear: 'derecha', render: (e) => <Interruptor etiqueta={`Activar ${e.nombre}`} prendido={e.activo} alCambiar={(v) => correr('x', async () => { await patch(`/api/equipo/${e.nombre}`, { activo: v }); recargar(); })()} /> },
+        ]}
+      />
     </Tarjeta>
   );
 }
@@ -109,17 +115,17 @@ function Chats() {
   const grupos = datos?.chats?.filter((c) => c.tipo === 'grupo') ?? [];
   return (
     <Tarjeta titulo="Grupos">
-      <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">Los grupos empiezan apagados. En un grupo activo, el agente responde solo si lo mencionan, le responden o lo llaman por su nombre.</p>
-      {grupos.length ? (
-        <ul className="flex flex-col divide-y divide-stone-200 text-sm dark:divide-stone-800">
-          {grupos.map((g) => (
-            <li key={g.id} className="flex items-center justify-between gap-3 py-2">
-              <span>{g.nombre || g.id}<span className="ml-2 text-xs text-stone-500">{fechaCorta(g.ultimo)}</span></span>
-              <Interruptor etiqueta={`Activar ${g.nombre || g.id}`} prendido={g.activo} alCambiar={(v) => correr('g', async () => { await patch(`/api/chats/${encodeURIComponent(g.id)}`, { activo: v }); cargar(); })()} />
-            </li>
-          ))}
-        </ul>
-      ) : <Vacio>Todavía no llegó ningún mensaje de un grupo.</Vacio>}
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Los grupos empiezan apagados. En un grupo activo, el agente responde solo si lo mencionan, le responden o lo llaman por su nombre.</p>
+      <Tabla
+        filas={grupos}
+        vacio="Todavía no llegó ningún mensaje de un grupo."
+        columnas={[
+          { clave: 'nombre', titulo: 'Grupo', principal: true, render: (g) => <span className="font-medium">{g.nombre || g.id}</span> },
+          { clave: 'ultimo', titulo: 'Último mensaje', render: (g) => <span className="text-stone-600 dark:text-stone-400">{fechaCorta(g.ultimo)}</span> },
+          { clave: 'estado', titulo: 'Estado', render: (g) => (g.activo ? <Estado tono="ok">Escucha</Estado> : <Estado>Apagado</Estado>) },
+          { clave: 'activo', titulo: 'Activo', alinear: 'derecha', render: (g) => <Interruptor etiqueta={`Activar ${g.nombre || g.id}`} prendido={g.activo} alCambiar={(v) => correr('g', async () => { await patch(`/api/chats/${encodeURIComponent(g.id)}`, { activo: v }); cargar(); })()} /> },
+        ]}
+      />
     </Tarjeta>
   );
 }
@@ -128,21 +134,22 @@ function Trabajos() {
   const { datos } = useDatos('/api/trabajos', { cada: 10000 });
   return (
     <Tarjeta titulo="Trabajos en segundo plano">
-      {datos?.trabajos?.length ? (
-        <ul className="flex flex-col divide-y divide-stone-200 text-sm dark:divide-stone-800">
-          {datos.trabajos.map((t) => {
-            const [txt, tono] = ESTADO_TRABAJO[t.estado] ?? [t.estado, 'neutro'];
-            return (
-              <li key={t.id} className="py-2">
-                <div className="flex items-center justify-between gap-2"><span className="font-medium">{t.id}</span><Estado tono={tono}>{txt}</Estado></div>
-                <p className="mt-1 text-stone-600 dark:text-stone-400">{t.descripcion.slice(0, 200)}</p>
-                <p className="text-xs text-stone-500">Pedido por {t.pedido_por ?? 'alguien'} · {fechaCorta(t.creado)}</p>
-                {t.resultado && <details className="mt-1"><summary className="cursor-pointer text-xs text-stone-500">Resultado</summary><p className="mt-1 whitespace-pre-wrap">{t.resultado}</p></details>}
-              </li>
-            );
-          })}
-        </ul>
-      ) : <Vacio>No hay trabajos.</Vacio>}
+      <Tabla
+        filas={datos?.trabajos ?? []}
+        vacio="No hay trabajos."
+        columnas={[
+          { clave: 'id', titulo: 'Trabajo', principal: true, ancho: 'w-24', render: (t) => <span className="font-mono text-xs font-semibold">{t.id}</span> },
+          { clave: 'descripcion', titulo: 'Qué hace', render: (t) => (
+            <div className="max-w-xl">
+              <p className="line-clamp-2">{t.descripcion}</p>
+              {t.resultado && <details className="mt-1"><summary className="cursor-pointer text-xs text-stone-500">Ver resultado</summary><p className="mt-1 whitespace-pre-wrap text-stone-700 dark:text-stone-300">{t.resultado}</p></details>}
+            </div>
+          ) },
+          { clave: 'pedido', titulo: 'Pedido por', render: (t) => <span className="whitespace-nowrap">{t.pedido_por ?? 'alguien'}</span> },
+          { clave: 'creado', titulo: 'Cuándo', render: (t) => <span className="whitespace-nowrap text-stone-600 dark:text-stone-400">{fechaCorta(t.creado)}</span> },
+          { clave: 'estado', titulo: 'Estado', alinear: 'derecha', render: (t) => { const [txt, tono] = ESTADO_TRABAJO[t.estado] ?? [t.estado, 'neutro']; return <Estado tono={tono}>{txt}</Estado>; } },
+        ]}
+      />
     </Tarjeta>
   );
 }
@@ -152,26 +159,30 @@ function Rutinas() {
   const { error, correr } = useAccion();
   return (
     <Tarjeta titulo="Rutinas">
-      <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">Se crean pidiéndoselas al agente ("todos los lunes a las 9, mandame el resumen").</p>
-      {datos?.rutinas?.length ? (
-        <ul className="flex flex-col divide-y divide-stone-200 text-sm dark:divide-stone-800">
-          {datos.rutinas.map((r) => (
-            <li key={r.id} className="py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span><span className="font-medium">R-{r.id}</span> <code className="ml-1 text-xs">{r.cuando}</code> <span className="text-xs text-stone-500">{r.zona_horaria}</span></span>
-                <div className="flex items-center gap-2">
-                  {!r.aprobada && <Estado tono="espera">Sin aprobar</Estado>}
-                  <Interruptor etiqueta={`Activar R-${r.id}`} disabled={!r.aprobada} prendido={r.activa} alCambiar={(v) => correr('a', async () => { await patch(`/api/rutinas/${r.id}`, { activa: v }); cargar(); })()} />
-                  <Boton variante="fantasma" onClick={correr('b', async () => { await borrar(`/api/rutinas/${r.id}`); cargar(); })}>Borrar</Boton>
-                </div>
-              </div>
-              <p className="mt-1">{r.instruccion}</p>
-              <p className="text-xs text-stone-500">De {r.creador ?? 'alguien'} · próxima {fechaCorta(r.proxima)} · destinos: {r.destinos.join(', ')}</p>
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Se crean pidiéndoselas al agente ("todos los lunes a las 9, mandame el resumen").</p>
+      <Tabla
+        filas={datos?.rutinas ?? []}
+        vacio="No hay rutinas."
+        columnas={[
+          { clave: 'rutina', titulo: 'Rutina', principal: true, render: (r) => (
+            <div className="max-w-md">
+              <span className="font-mono text-xs font-semibold text-stone-500">R-{r.id}</span>
+              <p>{r.instruccion}</p>
+              <p className="text-xs text-stone-500">De {r.creador ?? 'alguien'} · destinos: {r.destinos.join(', ') || '—'}</p>
               {r.pausa_motivo && !r.activa && <p className="text-xs text-amber-700 dark:text-amber-400">{r.pausa_motivo}</p>}
-            </li>
-          ))}
-        </ul>
-      ) : <Vacio>No hay rutinas.</Vacio>}
+            </div>
+          ) },
+          { clave: 'cuando', titulo: 'Cuándo', render: (r) => <div><code className="text-xs">{r.cuando}</code><div className="text-xs text-stone-500">{r.zona_horaria}</div></div> },
+          { clave: 'proxima', titulo: 'Próxima', render: (r) => <span className="whitespace-nowrap">{fechaCorta(r.proxima)}</span> },
+          { clave: 'activa', titulo: 'Activa', render: (r) => (
+            <div className="flex items-center gap-2">
+              {!r.aprobada && <Estado tono="espera">Sin aprobar</Estado>}
+              <Interruptor etiqueta={`Activar R-${r.id}`} disabled={!r.aprobada} prendido={r.activa} alCambiar={(v) => correr('a', async () => { await patch(`/api/rutinas/${r.id}`, { activa: v }); cargar(); })()} />
+            </div>
+          ) },
+          { clave: 'acciones', titulo: '', alinear: 'derecha', render: (r) => <Boton variante="fantasma" onClick={correr('b', async () => { await borrar(`/api/rutinas/${r.id}`); cargar(); })}>Borrar</Boton> },
+        ]}
+      />
       {error && <div className="mt-3"><Aviso>{error}</Aviso></div>}
     </Tarjeta>
   );
@@ -254,11 +265,12 @@ export default function Agente() {
       {datos && (
         <>
           <div className="lg:col-span-2"><General datos={datos} recargar={cargar} /></div>
-          <Modelos datos={datos} recargar={cargar} />
-          <div className="grid content-start gap-5"><Equipo datos={datos} recargar={cargar} /><Chats /></div>
-          <Trabajos />
+          <div className="lg:col-span-2"><Modelos datos={datos} recargar={cargar} /></div>
+          <div className="lg:col-span-2"><Equipo datos={datos} recargar={cargar} /></div>
+          <div className="lg:col-span-2"><Trabajos /></div>
+          <div className="lg:col-span-2"><Rutinas /></div>
+          <Chats />
           <Sesiones />
-          <Rutinas />
           <Entradas />
           <Reglas />
           <Lecciones />

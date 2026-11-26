@@ -1,6 +1,7 @@
 # Diseño: varios motores de agente
 
-Estado: **fases 1 y 2 implementadas en 0.5.0** (Claude con clave de API, adaptadores y OpenCode 1.19.6). Cómo se
+Estado: **las cinco fases están implementadas** (0.5.0: Claude con clave de API, adaptadores y OpenCode 1.19.6;
+0.6.0: Codex 0.172.0, Gemini CLI 0.71.1, respaldo automático y topes de gasto). Cómo se
 usa: [../MOTORES.md](../MOTORES.md). Lo de abajo es el diseño completo; las fases 3 a 5 siguen pendientes.
 
 ## Objetivo
