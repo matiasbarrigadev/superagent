@@ -71,7 +71,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
       if (puede('iniciar_conversacion')) gateway.push('iniciar_conversacion');
       if (puede('publicar')) gateway.push('publicar');
       if (variante === 'onboarding') gateway.push('terminar_onboarding');
-      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'configurar_sesion', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
+      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'vincular_numero', 'configurar_sesion', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
       if (decidir('ver_consumo').decision === 'permitir') gateway.push('consumo');
       gateway.push('reiniciar_contexto');
       if (puede('agregar_conector') || puede('conectar_mis_cuentas')) gateway.push('agregar_conector');

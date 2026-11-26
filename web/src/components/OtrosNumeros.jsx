@@ -6,6 +6,24 @@ import { useAccion, useDatos } from '../hooks.js';
 import WhatsApp from './WhatsApp.jsx';
 import { Aviso, Boton, Campo, Tarjeta } from './ui.jsx';
 
+/** Para la tarjeta del número principal: cuántos números más hay y un atajo para sumar otro. */
+export function SumarNumero() {
+  const d = useDatos('/api/whatsapp/numeros');
+  const otros = (d.datos?.numeros ?? []).filter((n) => !n.principal).length;
+  const ir = () => {
+    const el = document.getElementById('sumar-numero');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => el?.querySelector('input')?.focus(), 400);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3 text-sm dark:border-stone-800">
+      <span className="text-stone-600 dark:text-stone-400">{otros ? `${otros} número${otros > 1 ? 's' : ''} más vinculado${otros > 1 ? 's' : ''} abajo.` : 'Podés sumar más números (el de la empresa, tu personal…).'}</span>
+      <Boton variante="secundario" onClick={ir}>Sumar otro número</Boton>
+      <span className="w-full text-xs text-stone-500 dark:text-stone-400">O pedíselo al agente por WhatsApp: "quiero sumar otro número" y te guía con un código.</span>
+    </div>
+  );
+}
+
 const MODOS = { responder: 'Responde', leer: 'Solo lee', avisos: 'Solo avisos', nada: 'Sin actividad (falta configurarlo)' };
 
 export default function OtrosNumeros() {
@@ -44,7 +62,7 @@ export default function OtrosNumeros() {
           )} />
       ))}
 
-      <Tarjeta titulo="Sumar otro número de WhatsApp">
+      <div id="sumar-numero" className="scroll-mt-6"><Tarjeta titulo="Sumar otro número de WhatsApp">
         <form onSubmit={sumar} className="flex flex-col gap-3 text-sm">
           <p className="text-stone-600 dark:text-stone-400">
             Por ejemplo, el número de la empresa además del tuyo, o tu WhatsApp personal para que el agente solo lea los chats de clientes.
@@ -55,7 +73,7 @@ export default function OtrosNumeros() {
           <div><Boton cargando={cargando === 'sumar'} disabled={!nombre.trim()}>Sumar y vincular</Boton></div>
         </form>
         {error && <Aviso>{error}</Aviso>}
-      </Tarjeta>
+      </Tarjeta></div>
     </div>
   );
 }

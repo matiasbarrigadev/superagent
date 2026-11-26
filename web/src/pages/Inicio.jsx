@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, post } from '../api.js';
 import { Boton } from '../components/ui.jsx';
 import WhatsApp from '../components/WhatsApp.jsx';
-import OtrosNumeros from '../components/OtrosNumeros.jsx';
+import OtrosNumeros, { SumarNumero } from '../components/OtrosNumeros.jsx';
 import Claude from '../components/Claude.jsx';
 import Pendientes from '../components/Pendientes.jsx';
 import MiNumero from '../components/MiNumero.jsx';
@@ -134,10 +134,10 @@ export default function Inicio({ resumen, irA, usuario }) {
         {/* En la puesta en marcha, el número va antes que WhatsApp: al vincular, el agente ya sabe a quién escribirle. */}
         {r && !r.yo?.verificada && <div id="mi-numero" className="scroll-mt-6 lg:col-span-2"><MiNumero yo={r.yo} alCambiar={resumen.cargar} /></div>}
         <div id="claude" className="scroll-mt-6"><Claude /></div>
-        <div id="whatsapp" className="scroll-mt-6"><WhatsApp /></div>
+        <div id="whatsapp" className="scroll-mt-6"><WhatsApp pie={r?.yo?.verificada ? <SumarNumero /> : null} /></div>
+        {r?.yo?.verificada && <div id="otros-numeros" className="scroll-mt-6 lg:col-span-2"><OtrosNumeros /></div>}
         <div className="lg:col-span-2"><Consumo /></div>
         {r?.yo?.verificada && <div id="mi-numero" className="scroll-mt-6 lg:col-span-2"><MiNumero yo={r.yo} alCambiar={resumen.cargar} /></div>}
-        {r?.yo?.verificada && <div id="otros-numeros" className="scroll-mt-6 lg:col-span-2"><OtrosNumeros /></div>}
       </div>
       {!urgente && <Pendientes />}
       {!r?.pausada && (

@@ -23,6 +23,10 @@ export function wahaFalso(extra = {}) {
     telefonoDeLid: async () => null,
     lidDeTelefono: async () => null,
     descargar: async () => ({ datos: Buffer.from(''), tipo: 'application/octet-stream' }),
+    pedirCodigo: async () => ({ codigo: 'ABCD-1234' }),
+    qr: async () => ({ tipo: 'image/png', datos: Buffer.from('png') }),
+    enviarArchivo: async (chatId, archivo) => { enviados.push({ chatId, archivo: archivo.filename }); return `id-${enviados.length}`; },
+    borrar: async () => {},
     ...extra,
   };
 }

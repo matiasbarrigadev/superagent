@@ -874,6 +874,77 @@ export function crearHerramientas({ db, numeros = null, paquetes = null, despert
       },
     },
 
+    vincular_numero: {
+      descripcion: 'Solo el Propietario, en su charla: sumar y vincular números de WhatsApp sin que tenga que entrar al panel, guiándolo paso a paso. Acciones: "crear" (numero: nombre corto en minúsculas, etiqueta: cómo lo llama) deja el número listo para vincular y mudo; "codigo" (numero, telefono del número nuevo con código de país) genera un código de 8 caracteres para vincular desde el teléfono, que es lo más cómodo; "qr" manda la imagen del QR a esta charla (vence en unos 20 segundos: sirve si lo abre en otra pantalla); "estado" dice si ya quedó vinculado; "quitar" lo desvincula y borra su configuración (pide confirmación en otro mensaje). Cuando quede vinculado te llega [número nuevo vinculado]: ahí armás su política con configurar_sesion.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['crear', 'codigo', 'qr', 'estado', 'quitar'] },
+          numero: { type: 'string', description: 'Nombre corto del número (sesión). Para el principal, su nombre (figura en el contexto).' },
+          etiqueta: { type: 'string', description: 'Al crear: cómo lo llama la gente ("empresa", "personal de Ana").' },
+          telefono: { type: 'string', description: 'Para "codigo": el teléfono del número que se va a vincular, con código de país.' },
+          confirmado: { type: 'boolean', description: 'Para "quitar": true solo después de que el Propietario lo confirme en un mensaje nuevo.' },
+        },
+        required: ['accion'],
+      },
+      async ejecutar(ctx, { accion, numero = null, etiqueta = null, telefono = null, confirmado = false }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, suma o vincula números.');
+        if (!numeros) throw new ErrorHerramienta('Esta instalación no maneja varios números.');
+        const n = String(numero ?? '').trim().toLowerCase();
+        if (accion === 'crear') {
+          let nombre;
+          try { nombre = await numeros.crear({ nombre: n, etiqueta: etiqueta ?? n }); } catch (e) { throw new ErrorHerramienta(e.message); }
+          return `Listo: el número "${etiqueta ?? nombre}" [${nombre}] quedó creado, mudo (no lee, no guarda, no responde) y esperando vincularse. Pedile al Propietario el teléfono de ese número para mandarle un código de vinculación (accion "codigo"), o mandale el QR (accion "qr"). También puede vincularlo en el panel.`;
+        }
+        const f = numeros.obtener(n);
+        if (!f) throw new ErrorHerramienta(`No existe el número "${n}". Los que hay: ${numeros.listar().map((x) => x.nombre).join(', ')}.`);
+        const cliente = numeros.cliente(f.nombre);
+        let e;
+        try { e = await cliente.estado(); } catch (err) { throw new ErrorHerramienta(err.message); }
+        if (accion === 'estado') {
+          const st = { WORKING: 'vinculado y andando', SCAN_QR_CODE: 'esperando que lo vinculen', STARTING: 'arrancando', STOPPED: 'detenido', FAILED: 'con falla (se reintenta solo)', NO_CREADA: 'preparándose' }[e.status] ?? e.status;
+          const tel = String(e?.me?.id ?? '').replace(/@.*$/, '');
+          return `"${f.etiqueta ?? f.nombre}": ${st}${tel ? ` (+${tel})` : ''}. Lo que hace: ${f.politica.modo === 'nada' ? 'nada todavía, hay que configurarlo con configurar_sesion' : f.politica.modo}.`;
+        }
+        if (accion === 'quitar') {
+          if (f.principal) throw new ErrorHerramienta('El número principal no se quita (se puede volver a vincular).');
+          const clave = `quitar|${ctx.personaId}|${f.nombre}`;
+          const previa = fichasMostradas.get(clave);
+          if (!confirmado || !previa) {
+            fichasMostradas.set(clave, { corridaId: ctx.corridaId, ts: reloj() });
+            return `Todavía no se quitó. Contale al Propietario que se desvincula "${f.etiqueta ?? f.nombre}" y se borra su configuración (lo ya guardado de sus chats queda), y preguntale si lo confirma. Si confirma en un mensaje nuevo, repetí con confirmado: true.`;
+          }
+          if (previa.corridaId === ctx.corridaId) throw new ErrorHerramienta('El Propietario todavía no lo confirmó: esperá su respuesta.');
+          fichasMostradas.delete(clave);
+          try { await numeros.borrar(f.nombre); } catch (err) { throw new ErrorHerramienta(err.message); }
+          return `Listo: "${f.etiqueta ?? f.nombre}" quedó desvinculado y quitado.`;
+        }
+        if (e.status === 'WORKING') throw new ErrorHerramienta(`"${f.etiqueta ?? f.nombre}" ya está vinculado${e?.me?.id ? ` (+${String(e.me.id).replace(/@.*$/, '')})` : ''}.`);
+        if (e.status !== 'SCAN_QR_CODE') {
+          try { await cliente.asegurar(); } catch {}
+          throw new ErrorHerramienta('El número se está preparando para vincularse: probá de nuevo en unos segundos (accion "estado" para ver cómo va).');
+        }
+        if (accion === 'codigo') {
+          const tel = soloDigitos(telefono ?? '');
+          if (tel.length < 8 || tel.length > 15) throw new ErrorHerramienta('Necesito el teléfono del número que se va a vincular, con código de país (por ejemplo 5491112345678).');
+          let r;
+          try { r = await cliente.pedirCodigo(tel); } catch (err) { throw new ErrorHerramienta(err.message); }
+          auditar(db, 'whatsapp.codigo_vinculacion', { actor: String(ctx.personaId ?? ''), detalle: { nombre: f.nombre } });
+          return `Código de vinculación: ${r.codigo}. Pasáselo al Propietario con estos pasos, para hacer en el teléfono de ese número: WhatsApp → Ajustes (o los tres puntos) → Dispositivos vinculados → Vincular un dispositivo → "Vincular con el número de teléfono" → escribir el código. Vence en pocos minutos: si no llega a tiempo, pedís otro. Cuando quede, te llega [número nuevo vinculado].`;
+        }
+        if (accion === 'qr') {
+          if (!archivos) throw new ErrorHerramienta('No puedo mandar imágenes en esta instalación.');
+          let q;
+          try { q = await cliente.qr(); } catch (err) { throw new ErrorHerramienta(err.message); }
+          const id = archivos.guardar({ chatId: ctx.chatId, nombre: `qr-${f.nombre}.png`, datos: q.datos, origen: `corrida:${ctx.corridaId}` });
+          salida.encolar({ chatId: ctx.chatId, tipo: 'archivo', archivo: { archivoId: id, epigrafe: `QR para vincular "${f.etiqueta ?? f.nombre}". Vence en unos 20 segundos.` }, corridaId: ctx.corridaId, origen: 'vincular_numero' });
+          despertarSalida();
+          return 'QR enviado a esta charla. Decile que lo abra en otra pantalla (por ejemplo, WhatsApp Web en la compu) y lo escanee desde el teléfono del número nuevo: WhatsApp → Dispositivos vinculados → Vincular un dispositivo. Si vence, pedí otro; si se complica, mejor el código (accion "codigo").';
+        }
+        throw new ErrorHerramienta('Acción desconocida.');
+      },
+    },
+
     configurar_sesion: {
       descripcion: 'Solo el Propietario, en su charla: guarda lo que el Propietario quiere que hagas con un número de WhatsApp. Va su pedido con sus palabras (politica.texto) y el resumen mínimo que hace cumplir el gateway: modo (responder | leer | avisos | nada), qué chats entran (todos | grupos | directos | clientes | lista, con "lista" y "excluir" de JIDs), si se guardan y cuántos días, si escribe primero (segun_rol | no), conectores (lista o null = los del rol) y notas (instrucciones tuyas, no bloqueos). También qué número responde en un chat compartido (responde_en). Te devuelve la ficha: explicásela y aplicala recién cuando confirme en un mensaje nuevo (misma llamada con confirmado: true); eso lo exige el sistema.',
       esquema: {

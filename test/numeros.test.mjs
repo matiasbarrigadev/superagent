@@ -165,3 +165,47 @@ test('vincular un número nuevo: el agente le pregunta al Propietario qué hacer
   assert.equal(t.db.prepare("SELECT COUNT(*) AS n FROM mensajes WHERE tipo = 'evento' AND cuerpo LIKE '[número nuevo%'").get().n, 1, 'una sola vez');
   t.limpiar();
 });
+
+test('vincular_numero: el agente crea el número, manda el código o el QR y confirma antes de quitarlo', async () => {
+  const t = armar({
+    guion: (spec) => {
+      if (spec.prompt.includes('sumar el de la empresa')) return [{ herramienta: 'vincular_numero', args: { accion: 'crear', numero: 'empresa', etiqueta: 'empresa' } }];
+      if (spec.prompt.includes('es el 5491166666666')) return [{ herramienta: 'vincular_numero', args: { accion: 'codigo', numero: 'empresa', telefono: '5491166666666' } }];
+      if (spec.prompt.includes('mejor el qr')) return [{ herramienta: 'vincular_numero', args: { accion: 'qr', numero: 'empresa' } }];
+      if (spec.prompt.includes('sí, sacalo')) return [{ herramienta: 'vincular_numero', args: { accion: 'quitar', numero: 'empresa', confirmado: true } }];
+      if (spec.prompt.includes('sacalo')) return [{ herramienta: 'vincular_numero', args: { accion: 'quitar', numero: 'empresa' } }, { herramienta: 'vincular_numero', args: { accion: 'quitar', numero: 'empresa', confirmado: true } }];
+      return [];
+    },
+  });
+  persona(t.db, { nombre: 'Dueña', telefono: '5491111111111', rol: 'Propietario', verificada: 1 });
+  persona(t.db, { nombre: 'Colab', telefono: '5491122222222', rol: 'Colaborador' });
+  const txt = (i = 0) => t.corridas.at(-1).resultados[i].r.content[0].text;
+
+  await entra(t, { de: '5491111111111', texto: 'quiero sumar el de la empresa' });
+  await t.avanzar(46_000);
+  assert.match(txt(), /quedó creado, mudo/);
+  assert.equal(t.nucleo.numeros.politicaDe('empresa').modo, 'nada');
+
+  await entra(t, { de: '5491111111111', texto: 'es el 5491166666666' });
+  await t.avanzar(46_000);
+  assert.match(txt(), /Código de vinculación: ABCD-1234[\s\S]*Vincular con el número de teléfono/);
+
+  await entra(t, { de: '5491111111111', texto: 'mejor el qr' });
+  await t.avanzar(46_000);
+  assert.match(txt(), /QR enviado/);
+  assert.ok(t.waha.enviados.some((e) => e.archivo === 'qr-empresa.png' && e.chatId === '5491111111111@c.us'), 'el QR le llega al Propietario');
+
+  await entra(t, { de: '5491111111111', texto: 'sacalo' });
+  await t.avanzar(46_000);
+  assert.match(txt(0), /Todavía no se quitó/);
+  assert.match(txt(1), /todavía no lo confirmó/);
+  assert.ok(t.nucleo.numeros.obtener('empresa'));
+  await entra(t, { de: '5491111111111', texto: 'sí, sacalo' });
+  await t.avanzar(46_000);
+  assert.equal(t.nucleo.numeros.obtener('empresa'), null);
+
+  await entra(t, { de: '5491122222222', texto: 'hola' });
+  await t.avanzar(46_000);
+  assert.ok(!t.corridas.at(-1).spec.herramientasGateway.includes('vincular_numero'), 'un Colaborador no la tiene');
+  t.limpiar();
+});
