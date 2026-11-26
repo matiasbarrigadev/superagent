@@ -1,6 +1,6 @@
 // Piezas de conversación al estilo WhatsApp: fondo, burbujas, separador de día, avatar y "escribiendo".
 import Formato from './Formato.jsx';
-import Adjunto from './Adjunto.jsx';
+import Adjunto, { Especial } from './Adjunto.jsx';
 import { IconoAdjunto, IconoReloj } from './iconos.jsx';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
@@ -68,7 +68,7 @@ export function SeparadorDia({ ms }) {
  * Una burbuja. `propia` = la manda el agente (a la derecha, verde). `autor` se muestra en grupos.
  * `seguida` = el mensaje anterior es del mismo lado: sin "cola" y con menos espacio.
  */
-export function Burbuja({ propia, texto, ms, autor, adjunto, archivo = null, reacciones = [], editado = false, borrado = false, pendiente, seguida }) {
+export function Burbuja({ propia, texto, ms, autor, adjunto, archivo = null, especial = null, reacciones = [], editado = false, borrado = false, pendiente, seguida }) {
   return (
     <div className={cx('flex', propia ? 'justify-end' : 'justify-start', seguida ? 'mt-0.5' : 'mt-2', reacciones.length > 0 && 'mb-3')}>
       <div className={cx(
@@ -80,8 +80,9 @@ export function Burbuja({ propia, texto, ms, autor, adjunto, archivo = null, rea
         {archivo ? <div className="pt-1"><Adjunto a={archivo} /></div> : adjunto && (
           <p className="mb-1 flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400"><IconoAdjunto className="size-3.5" /> {adjunto}</p>
         )}
+        {especial && !borrado && <Especial e={especial} />}
         {borrado ? <span className="italic text-stone-500">🚫 Se eliminó este mensaje</span>
-          : texto ? <Formato texto={texto} /> : !adjunto && !archivo && <span className="italic text-stone-500">(sin texto)</span>}
+          : texto ? <Formato texto={texto} /> : !adjunto && !archivo && !especial && <span className="italic text-stone-500">(sin texto)</span>}
         <span className="float-right mt-1.5 ml-3 inline-flex translate-y-0.5 items-center gap-1 text-[0.68rem] text-stone-500 dark:text-stone-400">
           {editado && !borrado && <span>editado</span>}
           {pendiente && <IconoReloj className="size-3" />}

@@ -260,7 +260,7 @@ function Reglas() {
 export default function Agente() {
   const { datos, error, cargar } = useDatos('/api/ajustes');
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 [&>*]:min-w-0">
       {error && <Aviso>{error}</Aviso>}
       {datos && (
         <>

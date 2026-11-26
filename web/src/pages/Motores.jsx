@@ -146,7 +146,7 @@ export default function Motores() {
   const datalist = (motor) => (porId[motor]?.modelos?.length ? `modelos-${motor}` : undefined);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5 [&>*]:min-w-0">
       {Object.values(porId).map((m) => (
         <datalist key={m.id} id={`modelos-${m.id}`}>{m.modelos.filter((x) => !x.includes('<')).map((x) => <option key={x} value={x} />)}</datalist>
       ))}

@@ -56,7 +56,7 @@ export default function Personas({ usuario, secciones }) {
   const rolPorDefecto = roles.find((r) => r.nombre === 'Colaborador')?.id ?? roles[0]?.id;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5 [&>*]:min-w-0">
       {usuario?.accesos === 'todo' && <AccesoPanel secciones={secciones} usuario={usuario} />}
       <Tarjeta titulo="Todas las personas">
         <form className="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"

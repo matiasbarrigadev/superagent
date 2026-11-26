@@ -178,12 +178,21 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
   });
 
   const telefonoDe = (ch) => (ch.tipo === 'directo' && /^\d+@c\.us$/.test(ch.id) ? ch.id.split('@')[0] : null);
+  /** Para la lista: lo que mandó el agente sin texto (encuesta, ubicación, contacto), en una línea. */
+  const qEspecial = db.prepare("SELECT tipo, contenido FROM salida WHERE chat_id = ? AND (waha_id = ? OR waha_id LIKE '%\\_' || ? ESCAPE '\\') AND tipo IN ('encuesta', 'ubicacion', 'contacto')");
+  function textoEspecial(chatId, id) {
+    const s = qEspecial.get(chatId, String(id), String(id).split('_').pop());
+    if (!s) return null;
+    let d = {};
+    try { d = JSON.parse(s.contenido); } catch {}
+    return s.tipo === 'encuesta' ? `📊 ${d.pregunta ?? 'Encuesta'}` : s.tipo === 'ubicacion' ? `📍 ${d.titulo ?? 'Ubicación'}` : `👤 ${d.nombre ?? 'Contacto'}`;
+  }
   // --- Bandeja: las conversaciones de WhatsApp tal como las ve el agente (solo lectura).
   app.get('/api/inbox', (c) => {
     const filas = db.prepare(`SELECT ch.id, ch.tipo, ch.nombre, ch.activo, ch.cliente_id, cl.nombre AS cliente,
         p.nombre AS persona, p.telefono, r.nombre AS rol,
         (SELECT m.nombre_remitente FROM mensajes m WHERE m.chat_id = ch.id AND m.from_me = 0 AND m.nombre_remitente IS NOT NULL ORDER BY m.seq DESC LIMIT 1) AS contacto,
-        u.cuerpo AS ultimo_texto, u.from_me AS ultimo_mio, u.tipo AS ultimo_tipo, u.tiene_adjunto AS ultimo_adjunto,
+        u.cuerpo AS ultimo_texto, u.id AS ultimo_id, u.from_me AS ultimo_mio, u.tipo AS ultimo_tipo, u.tiene_adjunto AS ultimo_adjunto,
         u.nombre_remitente AS ultimo_remitente, u.recibido AS ultimo,
         (SELECT COUNT(*) FROM mensajes m WHERE m.chat_id = ch.id AND m.from_me = 0 AND m.tipo != 'evento'
            AND m.seq > COALESCE((SELECT CAST(valor AS INTEGER) FROM ajustes WHERE clave = 'inbox_leido:' || ch.id), 0)) AS sin_leer
@@ -197,7 +206,7 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     return c.json({
       chats: filas.map((x) => ({
         ...x, telefono: x.telefono ?? telefonoDe(x), activo: !!x.activo, ultimo_mio: !!x.ultimo_mio, ultimo_adjunto: !!x.ultimo_adjunto,
-        ultimo_texto: x.ultimo_texto ? String(x.ultimo_texto).slice(0, 160) : null,
+        ultimo_texto: x.ultimo_texto ? String(x.ultimo_texto).slice(0, 160) : x.ultimo_mio && x.ultimo_id ? textoEspecial(x.id, x.ultimo_id) : null,
         pensando: motor.corriendoEn(x.id),
       })),
     });
@@ -222,11 +231,30 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
       const k = corto(r.mensaje_id);
       reacciones.set(k, [...(reacciones.get(k) ?? []), { emoji: r.emoji, propia: r.de === 'yo' }]);
     }
+    // Lo que el agente mandó que no es texto (encuesta, ubicación, contacto): sus datos están en la salida.
+    const especiales = new Map();
+    for (const s of db.prepare("SELECT tipo, contenido, waha_id FROM salida WHERE chat_id = ? AND waha_id IS NOT NULL AND tipo IN ('encuesta', 'ubicacion', 'contacto')").all(chatId)) {
+      try { especiales.set(corto(s.waha_id), { tipo: s.tipo, ...JSON.parse(s.contenido) }); } catch {}
+    }
+    const votos = new Map();
+    for (const v of db.prepare('SELECT encuesta_id, de, nombre, opciones FROM encuesta_votos WHERE chat_id = ? ORDER BY ts').all(chatId)) {
+      let ops = [];
+      try { ops = JSON.parse(v.opciones); } catch {}
+      if (ops.length) votos.set(v.encuesta_id, [...(votos.get(v.encuesta_id) ?? []), { nombre: v.nombre ?? 'Alguien', opciones: ops }]);
+    }
+    const especialDe = (wid) => {
+      const e = especiales.get(corto(wid));
+      if (!e) return null;
+      if (e.tipo !== 'encuesta') return e;
+      const vs = votos.get(corto(wid)) ?? [];
+      return { ...e, votos: e.opciones.map((o) => ({ opcion: o, quienes: vs.filter((v) => v.opciones.includes(o)).map((v) => v.nombre) })), votantes: vs.length };
+    };
     const lista = mensajes.map(({ wid, session, adj_id: aid, adj_tipo: at, adj_mime: am, adj_nombre: an, adj_tamano: az, adj_estado: ae, adj_texto: ax, ...m }) => ({
       ...m, from_me: !!m.from_me, tiene_adjunto: !!m.tiene_adjunto, editado: !!m.editado, borrado: !!m.borrado,
       cuerpo: m.borrado ? null : m.cuerpo,
       adjunto: aid ? { id: aid, tipo: at, mime: am, nombre: an, tamano: az, estado: ae, texto: ax } : null,
       reacciones: reacciones.get(corto(wid)) ?? [],
+      especial: m.from_me ? especialDe(wid) : null,
     }));
     const pendientes = db.prepare("SELECT id, tipo, contenido, creado, estado FROM salida WHERE chat_id = ? AND estado = 'pendiente' ORDER BY id").all(chatId);
     // Abrir la conversación la marca como leída hasta el último mensaje.

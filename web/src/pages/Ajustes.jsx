@@ -32,7 +32,7 @@ export default function Ajustes({ usuario, version }) {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 [&>*]:min-w-0">
       <Tarjeta titulo="Tu cuenta">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-stone-500 dark:text-stone-400">Email</dt><dd className="break-all">{usuario?.email}</dd>

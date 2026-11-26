@@ -75,6 +75,9 @@ Lo que dejaría al agente sin número (vincular, desvincular, cambiar el webhook
 - **Audios y videos** con su reproductor, y la transcripción desplegable.
 - **PDF** con vista previa dentro del panel y botón para descargar.
 - **Cualquier otro archivo** (zip, Excel, Word…) como tarjeta con nombre, peso y **Descargar**.
+- **Encuestas** del agente con cada opción, su barra, el conteo y quién votó (el último voto de cada persona es el
+  que vale; en grupos el nombre sale aunque WhatsApp mande el voto con el id anónimo de la persona).
+- **Ubicaciones** (con link al mapa) y **contactos** que mandó el agente, como tarjeta.
 - Reacciones, "editado" y "Se eliminó este mensaje".
 
 Seguridad de los adjuntos:

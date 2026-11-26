@@ -27,7 +27,7 @@ function InicioInvitado({ usuario }) {
         <h1 className="text-2xl font-semibold tracking-tight">{saludo()}{nombre ? `, ${nombre}` : ''}</h1>
         <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">Esto es lo que podés ver y hacer en el panel del agente.</p>
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         {a.includes('whatsapp') && <div id="whatsapp" className="scroll-mt-6"><WhatsApp /></div>}
         {a.includes('whatsapp') && <div className="lg:col-span-2"><OtrosNumeros /></div>}
         {a.includes('claude') && <div id="claude" className="scroll-mt-6"><Claude /></div>}
@@ -130,7 +130,7 @@ export default function Inicio({ resumen, irA, usuario }) {
       {/* Lo que espera tu ok va arriba; si no hay nada, abajo de las conexiones. */}
       {urgente && <Pendientes />}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         {/* En la puesta en marcha, el número va antes que WhatsApp: al vincular, el agente ya sabe a quién escribirle. */}
         {r && !r.yo?.verificada && <div id="mi-numero" className="scroll-mt-6 lg:col-span-2"><MiNumero yo={r.yo} alCambiar={resumen.cargar} /></div>}
         <div id="claude" className="scroll-mt-6"><Claude /></div>

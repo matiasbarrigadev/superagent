@@ -118,3 +118,55 @@ export default function Adjunto({ a }) {
   }
   return <div className="mb-1"><Tarjeta a={a} descargar={descargar} />{texto}</div>;
 }
+
+/** Encuesta, ubicación o contacto que mandó el agente, como se ve en WhatsApp. */
+export function Especial({ e }) {
+  if (!e) return null;
+  if (e.tipo === 'encuesta') {
+    const max = Math.max(1, ...e.votos.map((v) => v.quienes.length));
+    return (
+      <div className="mb-1 min-w-60 max-w-sm py-1">
+        <p className="font-semibold">📊 {e.pregunta}</p>
+        <p className="mb-2 text-xs text-stone-500 dark:text-stone-400">{e.varias ? 'Se pueden elegir varias' : 'Una opción'} · {e.votantes} {e.votantes === 1 ? 'voto' : 'votos'}</p>
+        <ul className="flex flex-col gap-2">
+          {e.votos.map((v) => (
+            <li key={v.opcion} title={v.quienes.join(', ') || 'Sin votos'}>
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span>{v.opcion}</span>
+                <span className="shrink-0 tabular-nums text-xs font-semibold text-stone-500">{v.quienes.length}</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200 dark:bg-stone-700">
+                <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${(v.quienes.length / max) * 100}%` }} />
+              </div>
+              {v.quienes.length > 0 && <p className="mt-0.5 truncate text-[0.7rem] text-stone-500 dark:text-stone-400">{v.quienes.join(', ')}</p>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (e.tipo === 'ubicacion') {
+    const url = `https://www.openstreetmap.org/?mlat=${e.latitud}&mlon=${e.longitud}#map=17/${e.latitud}/${e.longitud}`;
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex min-w-56 items-center gap-3 rounded-xl bg-stone-100/80 p-2.5 hover:bg-stone-200/70 dark:bg-stone-900/50 dark:hover:bg-stone-900">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-rose-600 text-lg" aria-hidden="true">📍</span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{e.titulo ?? 'Ubicación'}</span>
+          <span className="block text-xs text-stone-500 dark:text-stone-400">{Number(e.latitud).toFixed(5)}, {Number(e.longitud).toFixed(5)} · Ver en el mapa</span>
+        </span>
+      </a>
+    );
+  }
+  if (e.tipo === 'contacto') {
+    return (
+      <div className="mb-1 flex min-w-56 items-center gap-3 rounded-xl bg-stone-100/80 p-2.5 dark:bg-stone-900/50">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sky-600 text-sm font-semibold text-white" aria-hidden="true">{String(e.nombre ?? '?').slice(0, 1).toUpperCase()}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{e.nombre}</span>
+          <span className="block text-xs text-stone-500 dark:text-stone-400">+{e.telefono}{e.empresa ? ` · ${e.empresa}` : ''}</span>
+        </span>
+      </div>
+    );
+  }
+  return null;
+}

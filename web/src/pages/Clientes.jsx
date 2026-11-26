@@ -61,7 +61,7 @@ export default function Clientes() {
   const [f, setF] = useState({ nombre: '', autonomia: 'consultar_lo_importante' });
   const { cargando, error, correr } = useAccion();
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5 [&>*]:min-w-0">
       <Tarjeta titulo="Lista de clientes">
         <p className="mb-3 text-sm text-stone-600 dark:text-stone-400">Para trabajar como agencia: cada cliente tiene sus grupos, proyectos, memoria y nivel de autonomía. El agente también puede proponer uno cuando aparece un grupo nuevo.</p>
         <form className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end" onSubmit={correr('c', async () => { await post('/api/clientes', f); setF({ nombre: '', autonomia: 'consultar_lo_importante' }); cargar(); })}>

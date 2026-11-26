@@ -181,3 +181,31 @@ test('cliente WAHA: foto, reacción y edición con el formato de GOWS; una sesi�
   assert.equal(pedidos.filter((p) => p.metodo === 'PUT' && p.ruta === '/api/sessions/default').length, 1, 'se actualiza una sola vez');
   assert.ok(['message.reaction', 'message.edited', 'message.revoked', 'poll.vote'].every((e) => eventos.includes(e)));
 });
+
+test('la bandeja muestra la encuesta del agente con sus votos (el último voto de cada uno vale) y la ubicación', async () => {
+  const t = armar({
+    guion: (spec) => (spec.prompt.includes('ZXVOTEMOS')
+      ? [{ herramienta: 'enviar_encuesta', args: { pregunta: '¿Qué día?', opciones: ['Lunes', 'Martes'] } }, { herramienta: 'enviar_ubicacion', args: { latitud: -34.6, longitud: -58.4, titulo: 'Oficina' } }]
+      : []),
+  });
+  await entrarComoPropietario(t);
+  persona(t.db, { nombre: 'Ana', telefono: '5491122222222', rol: 'Colaborador' });
+  await entra(t, '5491122222222', 'ZXVOTEMOS');
+  await t.avanzar(46_000);
+  const { waha_id: idEnc } = t.db.prepare("SELECT waha_id FROM salida WHERE tipo = 'encuesta'").get();
+  const { waha_id: idUbi } = t.db.prepare("SELECT waha_id FROM salida WHERE tipo = 'ubicacion'").get();
+  // El eco de lo que mandó el agente llega sin texto, como manda GOWS las encuestas.
+  for (const id of [idEnc, idUbi]) await t.nucleo.ingesta({ event: 'message.any', session: 'default', me: { id: '5491100000001@c.us' }, payload: { id, timestamp: 1_800_000_100, from: '5491100000001@c.us', to: '5491122222222@c.us', fromMe: true, body: '', hasMedia: false, _data: { Info: { Chat: '5491122222222@c.us' } } } });
+  const vota = (de, ops) => t.nucleo.ingesta({ event: 'poll.vote', session: 'default', payload: { vote: { id: `v-${de}`, from: de, selectedOptions: ops }, poll: { id: idEnc } } });
+  await vota('5491122222222@c.us', ['Lunes']);
+  await vota('5491122222222@c.us', ['Martes']); // cambió su voto
+  await vota('5491133333333@c.us', ['Martes']);
+  const r = await t.pedir('GET', '/api/inbox/mensajes?chat=5491122222222%40c.us');
+  const enc = r.json.mensajes.find((m) => m.especial?.tipo === 'encuesta').especial;
+  assert.equal(enc.pregunta, '¿Qué día?');
+  assert.equal(enc.votantes, 2);
+  assert.deepEqual(enc.votos, [{ opcion: 'Lunes', quienes: [] }, { opcion: 'Martes', quienes: ['Ana', '+5491133333333'] }]);
+  const ubi = r.json.mensajes.find((m) => m.especial?.tipo === 'ubicacion').especial;
+  assert.deepEqual([ubi.titulo, ubi.latitud], ['Oficina', -34.6]);
+  t.limpiar();
+});

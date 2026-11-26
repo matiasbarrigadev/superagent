@@ -247,7 +247,7 @@ function Variables() {
 
 export default function Conexiones() {
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-1 gap-5 [&>*]:min-w-0">
       <Variables />
       <Conectores />
       <Proyectos />

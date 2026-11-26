@@ -178,7 +178,7 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
   const buscarMensaje = (id) => (id ? qMensaje.get(String(id), idCorto(id)) : null);
 
   /** Reacciones, ediciones, borrados y votos de encuestas. */
-  function otroEvento(evt) {
+  async function otroEvento(evt) {
     const p = evt.payload ?? {};
     const sesion = evt.session ?? 'default';
     if (evt.event === 'message.reaction') {
@@ -215,9 +215,14 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
     if (numeros && !numeros.puedeResponder(encuesta.chat_id)) return 'ignorado';
     const opciones = (p.vote?.selectedOptions ?? []).map((o) => (typeof o === 'string' ? o : o?.name ?? '')).filter(Boolean);
     const quien = normalizarJid(p.vote?.from ?? p.vote?.participant ?? '');
-    const tel = telefonoDeJid(quien);
-    const persona = tel ? db.prepare('SELECT nombre FROM personas WHERE telefono = ?').get(tel)?.nombre : null;
-    alEvento({ chatId: encuesta.chat_id, origen: 'encuesta', texto: `[voto en tu encuesta] ${persona ?? (tel ? `+${tel}` : 'Alguien')} ${opciones.length ? `eligió: ${opciones.join(', ')}` : 'quitó su voto'}. La encuesta: ${String(encuesta.cuerpo ?? '').slice(0, 300)}` });
+    // En grupos el voto llega con el LID de la persona: se busca su teléfono y su nombre.
+    const tel = await telefonoDe(quien).catch(() => null);
+    const persona = tel ? db.prepare('SELECT nombre FROM personas WHERE telefono = ? OR (length(telefono) >= 10 AND substr(telefono, -10) = substr(?, -10)) ORDER BY alta_manual DESC LIMIT 1').get(tel, tel)?.nombre : null;
+    const contacto = persona ?? (quien ? db.prepare('SELECT nombre_remitente FROM mensajes WHERE remitente = ? AND nombre_remitente IS NOT NULL ORDER BY seq DESC LIMIT 1').get(quien)?.nombre_remitente : null);
+    db.prepare(`INSERT INTO encuesta_votos (session, encuesta_id, chat_id, de, nombre, opciones, ts) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session, encuesta_id, de) DO UPDATE SET opciones = excluded.opciones, nombre = COALESCE(excluded.nombre, encuesta_votos.nombre), ts = excluded.ts`)
+      .run(sesion, idCorto(idEncuesta), encuesta.chat_id, quien || 'alguien', contacto ?? (tel ? `+${tel}` : null), JSON.stringify(opciones), Date.now());
+    alEvento({ chatId: encuesta.chat_id, origen: 'encuesta', texto: `[voto en tu encuesta] ${contacto ?? (tel ? `+${tel}` : 'Alguien')} ${opciones.length ? `eligió: ${opciones.join(', ')}` : 'quitó su voto'}. La encuesta: ${String(encuesta.cuerpo ?? '').slice(0, 300)}` });
     return 'voto';
   }
 
