@@ -9,7 +9,8 @@ Un Superagent son dos servicios:
 
 - **`waha`**: WhatsApp (imagen `devlikeapro/waha:gows-2026.10.1`, motor GOWS). Nunca se expone a internet.
 - **`superagent`**: la imagen publicada `ghcr.io/matiasbarrigadev/superagent:<versión>` (amd64 y arm64). Gateway +
-  panel + Claude Code. Puerto 8080, healthcheck `/salud`.
+  panel + los motores de IA (Claude Code, Codex, Gemini CLI y OpenCode, con versiones fijas). Puerto 8080,
+  healthcheck `/salud`.
 
 **Instalá siempre desde la imagen, con una versión fija** (la última de
 [Releases](https://github.com/matiasbarrigadev/superagent/releases), por ejemplo `0.3.0`), no desde el repo: así la
@@ -28,7 +29,10 @@ Antes de empezar, confirmá con la persona:
 2. **Zona horaria** (ej. `America/Santiago`). Si no sabe, `UTC`; el agente la puede cambiar después.
 3. En Docker: **¿tiene un dominio** apuntando al servidor? (para HTTPS con Caddy). Si no, queda en `localhost`.
 
-No hace falta nada más para instalar. El número de WhatsApp y la cuenta de Claude se conectan al final, con la persona.
+No hace falta nada más para instalar. El número de WhatsApp y la IA se conectan al final, con la persona. Lo
+normal es su suscripción de Claude (Pro o Max); si no tiene, puede usar otro motor después (Claude con clave de
+API, Codex con su ChatGPT, Gemini con capa gratis u OpenCode con DeepSeek y otros), desde **Motores de IA** en el
+panel o pidiéndoselo al agente. Ver [docs/MOTORES.md](../../../docs/MOTORES.md).
 
 ## A. Railway
 
@@ -147,6 +151,7 @@ Mandale un mensaje así (con la URL real, no lo dejes para el final de una expli
 >
 > 1. Creá tu cuenta: nombre, email, contraseña y app de códigos. **Guardá los 10 códigos de recuperación.**
 > 2. **Inicio → Conectar Claude**: seguí el link, autorizá con tu cuenta de Claude (Pro o Max) y pegá el código.
+>    Si no tenés Claude, en **Motores de IA** podés usar otra IA (Codex con tu ChatGPT, Gemini, DeepSeek…).
 > 3. **Inicio → Tu número de WhatsApp**: tu WhatsApp personal. El panel te muestra un código.
 > 4. **Inicio → Vincular WhatsApp**: desde el teléfono del agente, WhatsApp → Dispositivos vinculados → escaneá el QR.
 >    El agente te escribe al instante: respóndele con el código y se configura contigo por WhatsApp.
@@ -168,6 +173,9 @@ versión nueva en Releases.
 - **Instalaciones viejas desde el repo**: pasar el servicio a la imagen (en Railway, cambiar *Source* a la imagen; en
   Docker, bajar el `docker-compose.yml` nuevo). Los volúmenes son los mismos, no se pierde nada.
 - Las migraciones de la base corren solas al arrancar.
+- **WAHA**: también va con versión fija (hoy `gows-2026.10.1`). Se actualiza aparte, después de probar la versión
+  nueva: en Railway, cambiar la imagen del servicio `waha` y redeployar; la sesión de WhatsApp queda en su volumen y
+  no pide QR de nuevo. Al arrancar, el gateway actualiza solo los eventos que escucha cada número.
 
 ## Problemas comunes
 
@@ -179,3 +187,4 @@ versión nueva en Releases.
 | Los mensajes no llegan al agente | WAHA no alcanza al gateway por la red interna: mirá los logs de `waha` (reintentos de webhook) y, fuera de Railway/compose, fijá `SUPERAGENT_INTERNAL_URL` |
 | El QR expira | Normal: se regenera; escanearlo dentro del minuto |
 | Los links del agente no abren en el teléfono | `SUPERAGENT_PUBLIC_URL` apunta a `localhost` |
+| Un motor (Codex, Gemini, OpenCode) no responde | Falta su clave o llegó a su límite: el panel → **Motores de IA** muestra qué falta; sin respaldo, esas charlas esperan y llega un aviso |

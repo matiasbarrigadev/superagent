@@ -61,7 +61,9 @@ WHATSAPP_SWAGGER_PASSWORD=${{secret(48)}}
 
 - **Nombre**: `superagent`.
 - **Source**: Docker image `ghcr.io/matiasbarrigadev/superagent:latest` (el template publicado usa `latest`: cada
-  instalación nueva arranca con la última versión estable; las que ya existen no cambian hasta que se redeployan).
+  instalación nueva arranca con la última versión estable sin tocar el template; las que ya existen no cambian
+  hasta que se redeployan). La imagen de `waha`, en cambio, va fija: se cambia a mano en el template después de
+  probar la versión nueva.
   Después se puede fijar una versión (por ejemplo `0.3.0`). Para un fork con cambios propios, el repo (usa `Dockerfile` y
   `railway.json`).
 - **Healthcheck**: `/salud`. **Restart policy**: Always.
@@ -119,4 +121,5 @@ Cualquiera de estas se puede pisar con su variable (`SUPERAGENT_PUBLIC_URL`, `SU
 - Escribirle al número del agente y recibir respuesta (estado "Conectado").
 - Un redeploy de cualquiera de los dos no pide el QR de nuevo ni pierde la cuenta de Claude.
 - Opcional, en la shell de `superagent`: `node scripts/verificar-aislamiento.mjs`, `verificar-medios.mjs`,
-  `verificar-navegador.mjs`, `verificar-codigo.mjs` y `verificar-publicacion.mjs`. Cada una termina en "OK".
+  `verificar-navegador.mjs`, `verificar-codigo.mjs`, `verificar-publicacion.mjs` y `verificar-motores.mjs`. Cada una
+  termina en "OK".
