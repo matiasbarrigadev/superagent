@@ -44,6 +44,8 @@ Pedile a la persona que haga `railway login` si `railway whoami` falla (el login
 ```sh
 railway init --name superagent            # o `railway link` a un proyecto existente
 
+# Lo más simple: el template publicado, https://railway.com/deploy/superagente-en-whatsapp (si la persona
+# puede tocar el botón Deploy). Con la CLI, la misma receta:
 # Servicio 1: waha (el nombre "waha" es obligatorio: el gateway lo busca en waha.railway.internal:3000)
 KEY=$(openssl rand -hex 32); PASS=$(openssl rand -hex 24)
 railway add --service waha --image devlikeapro/waha:gows-2026.9.2 \

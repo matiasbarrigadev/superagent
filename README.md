@@ -46,9 +46,11 @@ versión: solo para probar.
 
 ### Opción A: Railway (recomendada para tenerlo 24/7)
 
-1. Creá un proyecto en Railway con dos servicios: `waha` (imagen de WhatsApp) y `superagent` (imagen
-   `ghcr.io/matiasbarrigadev/superagent`). La receta exacta, con volúmenes y variables, está en
-   [railway/TEMPLATE.md](railway/TEMPLATE.md). Si alguien ya publicó el template, es un botón **Deploy**.
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/superagente-en-whatsapp)
+
+1. Tocá **Deploy on Railway**. El template crea los dos servicios: `waha` (WhatsApp) y `superagent` (imagen
+   `ghcr.io/matiasbarrigadev/superagent`), con sus volúmenes, el dominio y los secretos. La receta, por si lo querés
+   armar a mano, está en [railway/TEMPLATE.md](railway/TEMPLATE.md).
 2. Cuando `superagent` esté en verde, abrí su dominio público y seguí [Primeros pasos](#primeros-pasos).
 
 Plan recomendado: Hobby o superior, con al menos 2 GB de RAM para `superagent`. **Actualizar:** en el servicio

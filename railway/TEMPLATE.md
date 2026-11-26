@@ -8,6 +8,8 @@ volúmenes, el dominio y los secretos. Nadie escribe variables. Después se abre
 
 ## Instalar con el template
 
+Template publicado: <https://railway.com/deploy/superagente-en-whatsapp>
+
 1. Abrir el template y tocar **Deploy**. Railway baja la imagen (unos 3 GB): tarda un par de minutos.
 2. Cuando `superagent` esté en verde, abrir su dominio público. Durante las primeras 2 horas desde el primer
    arranque el panel no pide código: se crea el Propietario directamente. Pasado ese tiempo pide el código de setup;
@@ -55,8 +57,9 @@ WHATSAPP_SWAGGER_PASSWORD=${{secret(48)}}
 ### Servicio 2: `superagent`
 
 - **Nombre**: `superagent`.
-- **Source**: Docker image `ghcr.io/matiasbarrigadev/superagent:0.3.0` (una versión fija; `latest` también sirve,
-  pero cambia sola cuando sale una nueva). Para un fork con cambios propios, el repo (usa `Dockerfile` y
+- **Source**: Docker image `ghcr.io/matiasbarrigadev/superagent:latest` (el template publicado usa `latest`: cada
+  instalación nueva arranca con la última versión estable; las que ya existen no cambian hasta que se redeployan).
+  Después se puede fijar una versión (por ejemplo `0.3.0`). Para un fork con cambios propios, el repo (usa `Dockerfile` y
   `railway.json`).
 - **Healthcheck**: `/salud`. **Restart policy**: Always.
 - **Volumen**: `/data`.
