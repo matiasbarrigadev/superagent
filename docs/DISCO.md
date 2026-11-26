@@ -37,10 +37,15 @@ otro mensaje, o en el panel.
 
 ## 2. Aviso al 80 %
 
-Cuando el volumen pasa el umbral (80 % por defecto, se puede cambiar entre 50 y 99), una vez por día:
+Cuando el volumen pasa el umbral (80 % por defecto, se puede cambiar entre 50 y 99), una vez por día, el aviso le
+llega **solo al agente** (`[disco al N%]`), no a vos. El agente se hace cargo:
 
-- te llega un aviso con lo que más ocupa;
-- el agente se despierta con `[disco al N%]`, mira el detalle y te propone qué liberar o ampliar el volumen.
+- mira el detalle y libera por su cuenta lo que se regenera solo;
+- si lo resolvió, no te escribe;
+- te escribe solo si es crítico (sigue por encima del 95 %, o hace falta borrar algo tuyo), en palabras simples: qué
+  pasa, qué propone y qué tenés que decidir (por ejemplo, ampliar el volumen).
+
+En el panel, la tarjeta del disco sigue mostrando el uso para quien quiera mirarlo.
 
 ## 3. El agente lo cuida
 

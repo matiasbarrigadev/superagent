@@ -58,7 +58,7 @@ test('limpieza: trabajos terminados de ayer, adjuntos y enviados viejos (queda e
   t.limpiar();
 });
 
-test('aviso al pasar el umbral: una vez por día, al Propietario y al agente para que proponga qué liberar', () => {
+test('aviso al pasar el umbral: una vez por día, solo al agente (no a la persona), que se hace cargo', () => {
   const t = armar();
   const avisos = [], despertares = [];
   let usado = 85;
@@ -69,8 +69,9 @@ test('aviso al pasar el umbral: una vez por día, al Propietario y al agente par
   });
   assert.equal(d.revisar().aviso, true);
   assert.equal(d.revisar().aviso, false, 'el mismo día no se repite');
-  assert.match(avisos[0], /el disco va por el 85%/);
-  assert.match(despertares[0].texto, /\[disco al 85%\][\s\S]*proponele al Propietario qué liberar/);
+  assert.equal(avisos.length, 0, 'a la persona no le llega nada');
+  assert.equal(despertares.length, 1);
+  assert.match(despertares[0].texto, /\[disco al 85%\][\s\S]*Hacete cargo[\s\S]*solo si es crítico/);
   assert.match(d.linea(), /\(85%\) — pasó el umbral de aviso/);
   usado = 40;
   t.tiempo.t += 2 * 86_400_000;

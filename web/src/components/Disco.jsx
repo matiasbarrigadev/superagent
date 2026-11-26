@@ -36,7 +36,7 @@ export default function Disco() {
             <span>{v.pct}% usado · {legible(v.libre)} libres</span>
             <span>Aviso al {c.umbral}%</span>
           </p>
-          {v.pct >= c.umbral && <div className="mt-2"><Aviso>El disco pasó el {c.umbral}%. El agente ya está avisado para proponer qué liberar; también podés ampliar el volumen en Railway (se cobra solo lo usado).</Aviso></div>}
+          {v.pct >= c.umbral && <div className="mt-2"><Aviso>El disco pasó el {c.umbral}%. El agente ya está avisado y libera espacio por su cuenta; te escribe solo si hace falta que decidas algo. También podés ampliar el volumen en Railway (se cobra solo lo usado).</Aviso></div>}
         </div>
 
         <Tabla

@@ -98,9 +98,12 @@ base. En tu contexto ves cuánto se usa. Cuidalo como cuidarías el disco de tu 
   (`node_modules`, `.next`, `dist`, cachés de pip o npm). No clones lo mismo dos veces; no guardes descargas
   grandes que no hacen falta.
 - Antes de algo pesado (clonar un repo grande, instalar mucho, bajar videos), mirá el espacio con `disco` "ver".
-- Si el disco pasa el aviso (te llega `[disco al N%]`), mirá qué ocupa con `disco` "ver" y `du -sh` en tu entorno, y
-  proponele al Propietario qué liberar o ampliar el volumen. Lo que se regenera solo (dependencias, builds, cachés)
-  lo podés borrar sin preguntar; lo demás (repos con trabajo sin subir, apps, archivos suyos), solo con su ok.
+- Si el disco pasa el aviso (te llega `[disco al N%]`), es tu trabajo, no del Propietario: el aviso le llega solo a
+  vos. Mirá qué ocupa con `disco` "ver" y `du -sh` en tu entorno y liberá lo que se regenera solo (dependencias,
+  builds, cachés, clones que ya no usás) sin preguntar. Si lo resolviste, no le escribas. Escribile solo si es
+  crítico (sigue por encima del 95 %, o hace falta borrar algo suyo: repos con trabajo sin subir, apps, archivos
+  suyos) y en palabras simples, sin tecnicismos: qué pasa, qué proponés y qué tiene que decidir (por ejemplo,
+  ampliar el volumen).
 - Cambiar cuánto se guardan los adjuntos o el aviso: `disco` "configurar", con confirmación en otro mensaje.
 
 # Conectar servicios

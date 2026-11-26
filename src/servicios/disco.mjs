@@ -178,8 +178,8 @@ export function crearDisco({ db, config, ajustes, aislamiento = null, avisos = n
     if (ajustes.get(clave)) return { volumen: v, limpieza, aviso: false };
     ajustes.set(clave, '1');
     const top = desglose({ fresco: true }).slice(0, 5).map((p) => `${p.nombre} ${legible(p.tamano)}`).join(', ');
-    avisos?.alPropietario(`Aviso de Superagent: el disco va por el ${v.pct}% (${legible(v.usado)} de ${legible(v.total)}). Lo que más ocupa: ${top}. Le pedí al agente que revise qué se puede liberar; también se puede ampliar el volumen en Railway.`, { tipo: 'aviso' });
-    despertarPropietarios?.({ origen: 'disco', texto: `[disco al ${v.pct}%] El volumen de datos va por ${legible(v.usado)} de ${legible(v.total)}. Mirá el detalle con la herramienta disco y proponele al Propietario qué liberar (dependencias y builds que se pueden regenerar, repos o apps que ya no usa en tu entorno, archivos grandes viejos), o ampliar el volumen. No borres nada que no se pueda recuperar sin su ok.` });
+    // El aviso es para el agente, no para la persona: él ordena el espacio y solo la molesta si es crítico.
+    despertarPropietarios?.({ origen: 'disco', texto: `[disco al ${v.pct}%] Aviso interno, no se lo reenvíes al Propietario. El volumen de datos va por ${legible(v.usado)} de ${legible(v.total)}; lo que más ocupa: ${top}. Hacete cargo: mirá el detalle con la herramienta disco y liberá por tu cuenta lo que se regenera solo (dependencias, builds, cachés, clones que ya no usás). No borres nada que no se pueda recuperar. Escribile al Propietario solo si es crítico: si aun así queda muy poco espacio (más del 95%) o para liberar hace falta borrar algo suyo. En ese caso, en palabras simples y sin tecnicismos: qué pasa, qué proponés y qué tiene que decidir (por ejemplo, ampliar el volumen). Si lo resolviste, no le escribas.` });
     return { volumen: v, limpieza, aviso: true };
   }
 
