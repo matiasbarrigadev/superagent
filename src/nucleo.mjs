@@ -268,7 +268,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
       }
     } catch (err) { log.warn?.('[whatsapp] número', nombre, err.message); }
   }
-  const ingesta = crearIngesta({ db, waha, numeros, config, ajustes, alMensaje, alAdjunto: (id) => medios.procesar(id), alCambiarEstado: (estado, evt) => {
+  const ingesta = crearIngesta({ db, waha, numeros, config, ajustes, alMensaje, alAdjunto: (id) => medios.procesar(id), alEvento: (e) => ref.motor?.despertar(e), alCambiarEstado: (estado, evt) => {
     const nombre = evt?.session ?? numeros.nombrePrincipal;
     if (estado === 'WORKING') {
       alVincularNumero(nombre);

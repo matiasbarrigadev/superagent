@@ -19,7 +19,7 @@ services:
     restart: "no"
 
   waha:
-    image: devlikeapro/waha:gows-2026.9.2
+    image: devlikeapro/waha:gows-2026.10.1
     restart: unless-stopped
     depends_on:
       secretos:

@@ -134,8 +134,9 @@ function Conversacion({ chatId, alVolver, alCambiar }) {
           ? <SeparadorDia key={`d${i}`} ms={f.dia} />
           : <Burbuja key={f.m.seq} propia={f.m.from_me} texto={f.m.cuerpo} ms={f.m.recibido} seguida={f.seguida}
               autor={grupo && !f.seguida ? f.m.autorClave : null}
-              adjunto={f.m.tiene_adjunto ? adjuntoDe(f.m.tipo, f.m.media_tipo) : null} />))}
-        {datos?.pendientes.map((p) => <Burbuja key={`p${p.id}`} propia texto={p.tipo === 'texto' ? p.contenido : null} adjunto={p.tipo !== 'texto' ? 'Archivo' : null} ms={p.creado} pendiente />)}
+              adjunto={f.m.tiene_adjunto ? adjuntoDe(f.m.tipo, f.m.media_tipo) : null}
+              archivo={f.m.adjunto} reacciones={f.m.reacciones} editado={f.m.editado} borrado={f.m.borrado} />))}
+        {datos?.pendientes.map((p) => <Burbuja key={`p${p.id}`} propia texto={p.tipo === 'texto' ? p.contenido : null} adjunto={p.tipo !== 'texto' ? ({ imagen: 'Foto', video: 'Video', sticker: 'Sticker', voz: 'Nota de voz', ubicacion: 'Ubicación', contacto: 'Contacto', encuesta: 'Encuesta', reaccion: 'Reacción', editar: 'Edición', borrar: 'Borrado' }[p.tipo] ?? 'Archivo') : null} ms={p.creado} pendiente />)}
         {datos?.pensando && <Escribiendo />}
         <div ref={fin} />
       </FondoChat>

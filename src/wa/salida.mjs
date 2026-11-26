@@ -22,16 +22,30 @@ export function partir(texto, max = LARGO_MAXIMO) {
   return partes;
 }
 
+/** Cómo se ve en el chat del panel lo que no es texto. */
+function comoTexto(tipo, d, arch) {
+  if (arch) return `📎 ${arch.nombre} [F-${arch.id}]${d?.epigrafe ? `\n${d.epigrafe}` : ''}`;
+  if (tipo === 'ubicacion') return `📍 ${d.titulo ?? 'Ubicación'} (${d.latitud}, ${d.longitud})`;
+  if (tipo === 'contacto') return `👤 ${d.nombre} +${String(d.telefono).replace(/\D/g, '')}`;
+  if (tipo === 'encuesta') return `📊 ${d.pregunta}\n${d.opciones.map((o) => `○ ${o}`).join('\n')}`;
+  if (tipo === 'reaccion') return `(reaccionó ${d.emoji || 'sin emoji'})`;
+  return `(${tipo})`;
+}
+
 export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null, reloj = () => Date.now(), log = console }) {
   const ins = db.prepare(`INSERT INTO salida (chat_id, tipo, contenido, responde_a, contacto_nuevo, estado, no_antes_de, corrida_id, origen, creado, sesion)
     VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`);
   const insPanel = db.prepare(`INSERT INTO mensajes (session, id, chat_id, from_me, tipo, cuerpo, ts, procesado, recibido, canal)
     VALUES ('panel', ?, ?, 1, 'chat', ?, ?, 1, ?, 'panel')`);
 
-  function encolar({ chatId, texto, tipo = 'texto', archivo = null, respondeA = null, contactoNuevo = false, corridaId = null, origen = null, sesion = null }) {
+  /**
+   * Encola algo para mandar. tipo: texto | archivo | imagen | video | sticker | voz (con `archivo`: { archivoId,
+   * epigrafe }) | reaccion | ubicacion | contacto | encuesta | editar | borrar (con `datos`).
+   */
+  function encolar({ chatId, texto, tipo = 'texto', archivo = null, datos = null, respondeA = null, contactoNuevo = false, corridaId = null, origen = null, sesion = null }) {
     const ahora = reloj();
     const ids = [];
-    const piezas = tipo === 'texto' ? partir(texto) : [JSON.stringify(archivo)];
+    const piezas = tipo === 'texto' ? partir(texto) : [JSON.stringify(archivo ?? datos ?? {})];
     for (const [i, contenido] of piezas.entries()) {
       ids.push(Number(ins.run(chatId, tipo, contenido, i === 0 ? respondeA : null, contactoNuevo ? 1 : 0, ahora, corridaId, origen, ahora, sesion).lastInsertRowid));
     }
@@ -83,20 +97,40 @@ export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null
           cliente = numeros.cliente(sesion);
         }
         try {
-          const adj = f.tipo === 'texto' ? null : JSON.parse(f.contenido);
-          const arch = adj ? archivos?.obtener(adj.archivoId) : null;
-          if (adj && !arch) throw new Error('El archivo ya no existe.');
+          const d = f.tipo === 'texto' ? null : JSON.parse(f.contenido);
+          const conArchivo = ['archivo', 'imagen', 'video', 'sticker', 'voz'].includes(f.tipo);
+          const arch = conArchivo ? archivos?.obtener(d.archivoId) : null;
+          if (conArchivo && !arch) throw new Error('El archivo ya no existe.');
+          const archivo = arch ? { mimetype: arch.mime, filename: arch.nombre, data: archivos.leer(arch).toString('base64') } : null;
+          let wahaId = null;
           if (esPanel(f.chat_id)) {
-            insPanel.run(`panel-${f.id}`, f.chat_id, f.tipo === 'texto' ? f.contenido : `📎 ${arch.nombre} [F-${arch.id}]${adj.epigrafe ? `
-${adj.epigrafe}` : ''}`, Math.floor(ahora / 1000), ahora);
+            insPanel.run(`panel-${f.id}`, f.chat_id, f.tipo === 'texto' ? f.contenido : comoTexto(f.tipo, d, arch), Math.floor(ahora / 1000), ahora);
           } else if (f.tipo === 'texto') {
-            await cliente.enviarTexto(f.chat_id, f.contenido, { responderA: f.responde_a });
+            wahaId = await cliente.enviarTexto(f.chat_id, f.contenido, { responderA: f.responde_a, menciones: d?.menciones ?? menciones(f) });
           } else if (f.tipo === 'archivo') {
-            await cliente.enviarArchivo(f.chat_id, { mimetype: arch.mime, filename: arch.nombre, data: archivos.leer(arch).toString('base64') }, { epigrafe: adj.epigrafe });
-          } else {
-            await cliente.enviarVoz(f.chat_id, { mimetype: arch.mime, data: archivos.leer(arch).toString('base64') });
+            wahaId = await cliente.enviarArchivo(f.chat_id, archivo, { epigrafe: d.epigrafe });
+          } else if (f.tipo === 'imagen') {
+            wahaId = await cliente.enviarImagen(f.chat_id, archivo, { epigrafe: d.epigrafe, responderA: f.responde_a });
+          } else if (f.tipo === 'video') {
+            wahaId = await cliente.enviarVideo(f.chat_id, archivo, { epigrafe: d.epigrafe, responderA: f.responde_a });
+          } else if (f.tipo === 'sticker') {
+            wahaId = await cliente.enviarSticker(f.chat_id, archivo);
+          } else if (f.tipo === 'voz') {
+            wahaId = await cliente.enviarVoz(f.chat_id, { mimetype: arch.mime, data: archivo.data });
+          } else if (f.tipo === 'reaccion') {
+            await cliente.reaccionar(d.mensajeId, d.emoji);
+          } else if (f.tipo === 'ubicacion') {
+            wahaId = await cliente.enviarUbicacion(f.chat_id, d);
+          } else if (f.tipo === 'contacto') {
+            wahaId = await cliente.enviarContacto(f.chat_id, d);
+          } else if (f.tipo === 'encuesta') {
+            wahaId = await cliente.enviarEncuesta(f.chat_id, d);
+          } else if (f.tipo === 'editar') {
+            wahaId = await cliente.editarMensaje(f.chat_id, d.mensajeId, d.texto);
+          } else if (f.tipo === 'borrar') {
+            await cliente.borrarMensaje(f.chat_id, d.mensajeId);
           }
-          db.prepare("UPDATE salida SET estado = 'enviado', enviado = ?, intentos = intentos + 1 WHERE id = ?").run(reloj(), f.id);
+          db.prepare("UPDATE salida SET estado = 'enviado', enviado = ?, intentos = intentos + 1, waha_id = ? WHERE id = ?").run(reloj(), wahaId ?? null, f.id);
           enviados++;
         } catch (e) {
           const intentos = f.intentos + 1;
@@ -111,6 +145,13 @@ ${adj.epigrafe}` : ''}`, Math.floor(ahora / 1000), ahora);
       ocupado = false;
     }
     return enviados;
+  }
+
+  // Menciones de un texto en un grupo: los @numero que aparecen.
+  function menciones(f) {
+    if (!String(f.chat_id).endsWith('@g.us')) return null;
+    const m = [...String(f.contenido).matchAll(/@(\d{8,15})\b/g)].map((x) => `${x[1]}@c.us`);
+    return m.length ? [...new Set(m)] : null;
   }
 
   return { encolar, procesar, esperaRitmo };

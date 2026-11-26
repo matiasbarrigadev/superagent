@@ -51,7 +51,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
     }
     let gateway;
     if (variante === 'tercero') {
-      gateway = ['responder', 'guardar_memoria', 'preguntar_al_propietario'];
+      gateway = ['responder', 'reaccionar', 'guardar_memoria', 'preguntar_al_propietario'];
     } else if (tipo === 'trabajo' || tipo === 'sesion') {
       // Un trabajo (o una sesión de proyecto) no le escribe a nadie: devuelve su resultado al orquestador.
       gateway = ['guardar_memoria', 'estado_de_trabajo'];
@@ -59,7 +59,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
       if (puede('publicar')) gateway.push('publicar');
       if (conProyecto && puede('editar_codigo')) gateway.push('subir_rama', 'abrir_pr');
     } else {
-      gateway = ['responder', 'guardar_memoria'];
+      gateway = ['responder', 'reaccionar', 'enviar_ubicacion', 'enviar_contacto', 'enviar_encuesta', 'editar_mensaje', 'borrar_mensaje', 'guardar_memoria'];
       if (puede('guardar_memoria')) gateway.push('guardar_leccion');
       if (claude.length) gateway.push('enviar_archivo');
       if (claude.length && ajustes.bool('enviar_audio', false)) gateway.push('enviar_audio');
@@ -114,7 +114,9 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
   function lineaMensaje(m, rolNombre, { conArchivos = false, rutas = null, adjuntos = [] } = {}) {
     if (m.tipo === 'evento') return `[${hora(m.recibido)}] (gateway) ${m.cuerpo}`;
     const quien = m.nombre_persona || m.nombre_remitente || m.telefono || 'Alguien';
-    let t = `[${hora(m.ts * 1000)}] ${quien}${rolNombre ? ` (${rolNombre})` : ''}: ${m.cuerpo || ''}`;
+    // M-n: la marca para citar o reaccionar a este mensaje (solo los de WhatsApp).
+    const marca = m.seq && m.session && !['panel', 'interno'].includes(m.session) ? ` · M-${m.seq}` : '';
+    let t = `[${hora(m.ts * 1000)}${marca}] ${quien}${rolNombre ? ` (${rolNombre})` : ''}: ${m.borrado ? '(borró este mensaje)' : m.cuerpo || ''}${m.editado ? ' (editado)' : ''}`;
     if (m.tiene_adjunto) {
       const a = db.prepare('SELECT id, tipo, ruta, estado, texto FROM adjuntos WHERE mensaje_seq = ?').get(m.seq);
       if (!a || !a.ruta || a.estado === 'fallido') {

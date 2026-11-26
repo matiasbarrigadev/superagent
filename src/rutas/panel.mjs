@@ -1,6 +1,8 @@
 // API del panel para el núcleo: personas y roles, ajustes, chat (onboarding), propuestas, aprobaciones,
 // avisos, trabajos, rutinas, entradas y reglas de contacto. Todo requiere sesión del Propietario.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { PERMISOS, enPalabras } from '../roles/permisos.mjs';
 import { zonaValida, proxima } from '../rutinas/cron.mjs';
 import { SECCIONES } from '../servicios/memoria.mjs';
@@ -208,16 +210,48 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
       WHERE ch.id = ? AND ch.id NOT LIKE 'panel:%'`).get(chatId);
     if (!chat) return c.json({ error: 'Esa conversación no existe.' }, 404);
     const desde = Number(c.req.query('desde') ?? 0) || 0;
-    const mensajes = db.prepare(`SELECT m.seq, m.from_me, m.tipo, m.cuerpo, m.recibido, m.ts, m.nombre_remitente, m.telefono, m.tiene_adjunto, m.media_tipo,
-        p.nombre AS persona
-      FROM mensajes m LEFT JOIN personas p ON p.id = m.persona_id
-      WHERE m.chat_id = ? AND m.seq > ? AND m.tipo != 'evento' ORDER BY m.seq DESC LIMIT 300`).all(chatId, desde).reverse()
-      .map((m) => ({ ...m, from_me: !!m.from_me, tiene_adjunto: !!m.tiene_adjunto }));
+    const mensajes = db.prepare(`SELECT m.seq, m.id AS wid, m.session, m.from_me, m.tipo, m.cuerpo, m.recibido, m.ts, m.nombre_remitente, m.telefono, m.tiene_adjunto, m.media_tipo,
+        m.editado, m.borrado, p.nombre AS persona,
+        a.id AS adj_id, a.tipo AS adj_tipo, a.mime AS adj_mime, a.nombre AS adj_nombre, a.tamano AS adj_tamano, a.estado AS adj_estado, a.texto AS adj_texto
+      FROM mensajes m LEFT JOIN personas p ON p.id = m.persona_id LEFT JOIN adjuntos a ON a.id = (SELECT MIN(id) FROM adjuntos WHERE mensaje_seq = m.seq)
+      WHERE m.chat_id = ? AND m.seq > ? AND m.tipo != 'evento' ORDER BY m.seq DESC LIMIT 300`).all(chatId, desde).reverse();
+    // Reacciones de la charla, por mensaje (se cruzan por el id final de WhatsApp, que es igual en todos los motores).
+    const corto = (id) => String(id ?? '').split('_').pop();
+    const reacciones = new Map();
+    for (const r of db.prepare("SELECT mensaje_id, de, emoji FROM reacciones WHERE chat_id = ? AND emoji != ''").all(chatId)) {
+      const k = corto(r.mensaje_id);
+      reacciones.set(k, [...(reacciones.get(k) ?? []), { emoji: r.emoji, propia: r.de === 'yo' }]);
+    }
+    const lista = mensajes.map(({ wid, session, adj_id: aid, adj_tipo: at, adj_mime: am, adj_nombre: an, adj_tamano: az, adj_estado: ae, adj_texto: ax, ...m }) => ({
+      ...m, from_me: !!m.from_me, tiene_adjunto: !!m.tiene_adjunto, editado: !!m.editado, borrado: !!m.borrado,
+      cuerpo: m.borrado ? null : m.cuerpo,
+      adjunto: aid ? { id: aid, tipo: at, mime: am, nombre: an, tamano: az, estado: ae, texto: ax } : null,
+      reacciones: reacciones.get(corto(wid)) ?? [],
+    }));
     const pendientes = db.prepare("SELECT id, tipo, contenido, creado, estado FROM salida WHERE chat_id = ? AND estado = 'pendiente' ORDER BY id").all(chatId);
     // Abrir la conversación la marca como leída hasta el último mensaje.
     const tope = db.prepare('SELECT MAX(seq) AS s FROM mensajes WHERE chat_id = ?').get(chatId).s;
     if (tope) ajustes.set(`inbox_leido:${chatId}`, String(tope));
-    return c.json({ chat: { ...chat, telefono: chat.telefono ?? telefonoDe(chat), activo: !!chat.activo }, mensajes, pendientes, pensando: motor.corriendoEn(chatId) });
+    return c.json({ chat: { ...chat, telefono: chat.telefono ?? telefonoDe(chat), activo: !!chat.activo }, mensajes: lista, pendientes, pensando: motor.corriendoEn(chatId) });
+  });
+
+  // Un adjunto de la bandeja. Se muestra en la página solo lo que el navegador no puede ejecutar (fotos sin SVG,
+  // audio, video y PDF); lo demás se descarga. Así un archivo que mandó cualquiera no corre en el panel.
+  const VISIBLES = /^(image\/(jpeg|png|gif|webp)|audio\/[\w.+-]+|video\/(mp4|webm|ogg|quicktime|3gpp)|application\/pdf)$/;
+  app.get('/api/inbox/adjunto/:id', (c) => {
+    const a = db.prepare("SELECT a.*, m.chat_id FROM adjuntos a JOIN mensajes m ON m.seq = a.mensaje_seq WHERE a.id = ? AND a.estado = 'listo'").get(Number(id(c)));
+    if (!a?.ruta || !fs.existsSync(a.ruta)) return c.json({ error: 'Ese archivo ya no está.' }, 404);
+    const mime = String(a.mime ?? '').split(';')[0].trim().toLowerCase();
+    const enLinea = VISIBLES.test(mime) && c.req.query('descargar') !== '1';
+    const nombre = a.nombre || path.basename(a.ruta).replace(/^\d+-/, '');
+    return c.body(fs.readFileSync(a.ruta), 200, {
+      'Content-Type': enLinea ? mime : 'application/octet-stream',
+      'Content-Disposition': `${enLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(nombre)}`,
+      'Cache-Control': 'no-store',
+      // Sin scripts ni nada que cargue de afuera; el PDF se puede mostrar dentro del panel.
+      'Content-Security-Policy': `default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'${mime === 'application/pdf' ? '' : '; sandbox'}`,
+      'X-Frame-Options': 'SAMEORIGIN',
+    });
   });
 
   // --- Chat del panel (onboarding y conversación con el agente).

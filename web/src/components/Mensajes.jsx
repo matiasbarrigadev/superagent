@@ -1,5 +1,6 @@
 // Piezas de conversación al estilo WhatsApp: fondo, burbujas, separador de día, avatar y "escribiendo".
 import Formato from './Formato.jsx';
+import Adjunto from './Adjunto.jsx';
 import { IconoAdjunto, IconoReloj } from './iconos.jsx';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
@@ -67,23 +68,32 @@ export function SeparadorDia({ ms }) {
  * Una burbuja. `propia` = la manda el agente (a la derecha, verde). `autor` se muestra en grupos.
  * `seguida` = el mensaje anterior es del mismo lado: sin "cola" y con menos espacio.
  */
-export function Burbuja({ propia, texto, ms, autor, adjunto, pendiente, seguida }) {
+export function Burbuja({ propia, texto, ms, autor, adjunto, archivo = null, reacciones = [], editado = false, borrado = false, pendiente, seguida }) {
   return (
-    <div className={cx('flex', propia ? 'justify-end' : 'justify-start', seguida ? 'mt-0.5' : 'mt-2')}>
+    <div className={cx('flex', propia ? 'justify-end' : 'justify-start', seguida ? 'mt-0.5' : 'mt-2', reacciones.length > 0 && 'mb-3')}>
       <div className={cx(
         'relative max-w-[85%] rounded-2xl px-3 pt-1.5 pb-1 text-[0.9rem] leading-snug shadow-sm sm:max-w-[70%]',
         propia ? 'bg-emerald-100 text-stone-900 dark:bg-emerald-900/70 dark:text-emerald-50' : 'bg-white text-stone-900 dark:bg-stone-800 dark:text-stone-100',
         !seguida && (propia ? 'rounded-tr-md' : 'rounded-tl-md'),
       )}>
         {autor && !propia && <p className={cx('mb-0.5 text-xs font-semibold', colorNombre(autor))}>{autor}</p>}
-        {adjunto && (
+        {archivo ? <div className="pt-1"><Adjunto a={archivo} /></div> : adjunto && (
           <p className="mb-1 flex items-center gap-1.5 text-xs text-stone-500 dark:text-stone-400"><IconoAdjunto className="size-3.5" /> {adjunto}</p>
         )}
-        {texto ? <Formato texto={texto} /> : !adjunto && <span className="italic text-stone-500">(sin texto)</span>}
+        {borrado ? <span className="italic text-stone-500">🚫 Se eliminó este mensaje</span>
+          : texto ? <Formato texto={texto} /> : !adjunto && !archivo && <span className="italic text-stone-500">(sin texto)</span>}
         <span className="float-right mt-1.5 ml-3 inline-flex translate-y-0.5 items-center gap-1 text-[0.68rem] text-stone-500 dark:text-stone-400">
+          {editado && !borrado && <span>editado</span>}
           {pendiente && <IconoReloj className="size-3" />}
           {hora(ms)}
         </span>
+        {reacciones.length > 0 && (
+          <span className={cx('absolute -bottom-3 flex items-center gap-0.5 rounded-full border border-stone-200 bg-white px-1.5 py-0.5 text-xs shadow-sm dark:border-stone-700 dark:bg-stone-800', propia ? 'right-2' : 'left-2')}
+            title={reacciones.map((r) => (r.propia ? `${r.emoji} (el agente)` : r.emoji)).join(' ')}>
+            {[...new Set(reacciones.map((r) => r.emoji))].slice(0, 4).join('')}
+            {reacciones.length > 1 && <span className="ml-0.5 text-stone-500">{reacciones.length}</span>}
+          </span>
+        )}
       </div>
     </div>
   );

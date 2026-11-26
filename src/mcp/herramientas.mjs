@@ -138,35 +138,94 @@ export function crearHerramientas({ db, motores = null, cuentaCodex = null, nume
     return archivos.guardar({ chatId: ctx.chatId, nombre: path.basename(ruta), datos, origen: `corrida:${ctx.corridaId}` });
   }
 
+  /** Puede escribir en esta charla (lo mismo que exige responder). */
+  function puedeEscribir(ctx) {
+    if (ctx.tipo === 'trabajo') throw new ErrorHerramienta('Un trabajo no le escribe a nadie: devolvé el resultado en tu respuesta final.');
+    if (ctx.tipo === 'rutina' && !(ctx.destinos ?? []).includes(ctx.chatId)) throw new ErrorHerramienta('Esta rutina no tiene aprobado escribir en este chat.');
+    exigir(ctx, 'responder');
+  }
+  /** "M-n": un mensaje de esta conversación (los que te llegan llevan esa marca). Devuelve su id de WhatsApp. */
+  function mensajeDe(ctx, ref) {
+    const n = /^M-(\d+)$/i.exec(String(ref ?? '').trim());
+    if (!n) throw new ErrorHerramienta('Indicá el mensaje con su marca M-n (la que aparece en cada mensaje que te llega).');
+    const m = db.prepare('SELECT seq, id, chat_id, session, from_me FROM mensajes WHERE seq = ?').get(Number(n[1]));
+    if (!m || m.chat_id !== ctx.chatId || ['interno', 'panel'].includes(m.session)) throw new ErrorHerramienta(`M-${n[1]} no es un mensaje de WhatsApp de esta conversación.`);
+    return m;
+  }
+  /** "S-n" (algo que mandaste, te lo devuelve responder) o "M-n" propio: su id de WhatsApp, para editar o borrar. */
+  function enviadoDe(ctx, ref) {
+    const r = String(ref ?? '').trim();
+    if (/^M-\d+$/i.test(r)) {
+      const m = mensajeDe(ctx, r);
+      if (!m.from_me) throw new ErrorHerramienta('Solo podés editar o borrar mensajes que mandaste vos.');
+      return m.id;
+    }
+    const n = /^S-(\d+)$/i.exec(r);
+    if (!n) throw new ErrorHerramienta('Indicá el mensaje con S-n (lo que te devolvió responder) o M-n.');
+    const s = db.prepare('SELECT chat_id, estado, waha_id FROM salida WHERE id = ?').get(Number(n[1]));
+    if (!s || s.chat_id !== ctx.chatId) throw new ErrorHerramienta(`S-${n[1]} no es un mensaje tuyo en esta conversación.`);
+    if (!s.waha_id) throw new ErrorHerramienta(s.estado === 'pendiente' ? 'Ese mensaje todavía no salió: probá en unos segundos.' : 'Ese mensaje no se puede editar ni borrar (no salió o WhatsApp no devolvió su id).');
+    return s.waha_id;
+  }
+  const soloWhatsapp = (ctx) => { if (esPanel(ctx.chatId)) throw new ErrorHerramienta('Esto es solo para chats de WhatsApp.'); };
+  const encolarAccion = (ctx, tipo, datos, origen) => {
+    const [id] = salida.encolar({ chatId: ctx.chatId, tipo, datos, corridaId: ctx.corridaId, origen });
+    ctx.respondio = true;
+    despertarSalida();
+    return id;
+  };
+
   const escribioAntes = (chatId) => !!db.prepare('SELECT 1 FROM mensajes WHERE chat_id = ? AND from_me = 0 AND tipo != ? LIMIT 1').get(chatId, 'evento');
 
   return {
     responder: {
-      descripcion: 'Manda un mensaje a la persona o al grupo de esta conversación. Es la única forma de que te lean.',
-      esquema: { type: 'object', properties: { texto: { type: 'string', description: 'Mensaje, con formato de WhatsApp.' } }, required: ['texto'] },
-      ejecutar(ctx, { texto: t }) {
+      descripcion: 'Manda un mensaje a la persona o al grupo de esta conversación. Es la única forma de que te lean. Con "citar" (M-n) responde citando ese mensaje, como en WhatsApp. En grupos, para mencionar a alguien escribí @ y su número con código de país (por ejemplo @5491112345678). Devuelve S-n: con eso podés editarlo o borrarlo después.',
+      esquema: {
+        type: 'object',
+        properties: {
+          texto: { type: 'string', description: 'Mensaje, con formato de WhatsApp.' },
+          citar: { type: 'string', description: 'Opcional: M-n del mensaje que querés citar.' },
+        },
+        required: ['texto'],
+      },
+      ejecutar(ctx, { texto: t, citar = null }) {
         if (ctx.tipo === 'trabajo') throw new ErrorHerramienta('Un trabajo no le escribe a nadie: devolvé el resultado en tu respuesta final.');
         const msg = texto(t, 20_000);
         if (!msg) throw new ErrorHerramienta('El mensaje está vacío.');
         if (ctx.tipo === 'rutina' && !(ctx.destinos ?? []).includes(ctx.chatId)) throw new ErrorHerramienta('Esta rutina no tiene aprobado escribir en este chat.');
         exigir(ctx, 'responder');
-        salida.encolar({ chatId: ctx.chatId, texto: msg, corridaId: ctx.corridaId, origen: 'responder' });
+        const respondeA = citar && !esPanel(ctx.chatId) ? mensajeDe(ctx, citar).id : null;
+        const ids = salida.encolar({ chatId: ctx.chatId, texto: msg, respondeA, corridaId: ctx.corridaId, origen: 'responder' });
         ctx.respondio = true;
         despertarSalida();
-        return 'Enviado.';
+        return `Enviado (${ids.map((i) => `S-${i}`).join(', ')}).`;
       },
     },
 
     enviar_archivo: {
-      descripcion: 'Manda un archivo a esta conversación: uno de tu carpeta de salida (por nombre), uno de tu carpeta de trabajo (ruta completa, por ejemplo una captura del navegador) o uno que preparó un trabajo (F-n).',
-      esquema: { type: 'object', properties: { archivo: { type: 'string', description: 'Nombre del archivo en tu carpeta de salida, o F-n.' }, epigrafe: { type: 'string' } }, required: ['archivo'] },
-      ejecutar(ctx, { archivo, epigrafe }) {
+      descripcion: 'Manda un archivo a esta conversación: uno de tu carpeta de salida (por nombre), uno de tu carpeta de trabajo (ruta completa, por ejemplo una captura del navegador) o uno que preparó un trabajo (F-n). "como": "auto" (fotos JPG/PNG como foto común de WhatsApp, videos MP4 como video, lo demás como documento), "foto", "video", "documento" (llega como archivo, sin comprimir: sirve para mandar una foto en calidad original) o "sticker" (tiene que ser WebP).',
+      esquema: {
+        type: 'object',
+        properties: {
+          archivo: { type: 'string', description: 'Nombre del archivo en tu carpeta de salida, o F-n.' },
+          epigrafe: { type: 'string' },
+          como: { type: 'string', enum: ['auto', 'foto', 'video', 'documento', 'sticker'] },
+        },
+        required: ['archivo'],
+      },
+      ejecutar(ctx, { archivo, epigrafe, como = 'auto' }) {
         if (ctx.tipo === 'trabajo') throw new ErrorHerramienta('Un trabajo no le manda nada a nadie: dejá el archivo en tu carpeta de salida y el orquestador lo va a recibir.');
         exigir(ctx, 'responder');
         const id = archivoPara(ctx, archivo);
-        salida.encolar({ chatId: ctx.chatId, tipo: 'archivo', archivo: { archivoId: id, epigrafe: epigrafe ? texto(epigrafe, 1000) : null }, corridaId: ctx.corridaId, origen: 'enviar_archivo' });
+        const mime = String(archivos.obtener(id)?.mime ?? '');
+        let tipo = { foto: 'imagen', video: 'video', documento: 'archivo', sticker: 'sticker' }[como] ?? null;
+        if (!tipo) tipo = /^image\/(jpeg|png)$/.test(mime) ? 'imagen' : mime === 'video/mp4' ? 'video' : 'archivo';
+        if (tipo === 'imagen' && !/^image\/(jpeg|png|webp)$/.test(mime)) throw new ErrorHerramienta(`Como foto van JPG o PNG (este es ${mime || 'desconocido'}): mandalo como documento o convertilo.`);
+        if (tipo === 'video' && !mime.startsWith('video/')) throw new ErrorHerramienta('Eso no es un video: mandalo como documento.');
+        if (tipo === 'sticker' && mime !== 'image/webp') throw new ErrorHerramienta('Un sticker tiene que ser WebP (por ejemplo, convertilo con ffmpeg o Python).');
+        const [sid] = salida.encolar({ chatId: ctx.chatId, tipo, archivo: { archivoId: id, epigrafe: epigrafe && tipo !== 'sticker' ? texto(epigrafe, 1000) : null }, corridaId: ctx.corridaId, origen: 'enviar_archivo' });
         despertarSalida();
-        return `Archivo F-${id} enviado.`;
+        return `Archivo F-${id} enviado como ${{ imagen: 'foto', video: 'video', archivo: 'documento', sticker: 'sticker' }[tipo]} (S-${sid}).`;
       },
     },
 
@@ -181,6 +240,95 @@ export function crearHerramientas({ db, motores = null, cuentaCodex = null, nume
         salida.encolar({ chatId: ctx.chatId, tipo: 'voz', archivo: { archivoId: id }, corridaId: ctx.corridaId, origen: 'enviar_audio' });
         despertarSalida();
         return 'Nota de voz enviada.';
+      },
+    },
+
+    reaccionar: {
+      descripcion: 'Reacciona con un emoji a un mensaje de esta conversación (M-n), como en WhatsApp. Útil para acusar recibo sin escribir ("👍", "✅", "🙏"). Con emoji vacío quita tu reacción.',
+      esquema: { type: 'object', properties: { mensaje: { type: 'string', description: 'M-n del mensaje.' }, emoji: { type: 'string' } }, required: ['mensaje', 'emoji'] },
+      ejecutar(ctx, { mensaje, emoji }) {
+        puedeEscribir(ctx); soloWhatsapp(ctx);
+        const e = String(emoji ?? '').trim();
+        if (e.length > 16 || /[\w<>]/.test(e)) throw new ErrorHerramienta('La reacción es un solo emoji.');
+        const m = mensajeDe(ctx, mensaje);
+        encolarAccion(ctx, 'reaccion', { mensajeId: m.id, emoji: e }, 'reaccionar');
+        return e ? `Reaccionaste ${e} a M-${m.seq}.` : `Quitaste tu reacción de M-${m.seq}.`;
+      },
+    },
+
+    enviar_ubicacion: {
+      descripcion: 'Manda una ubicación (pin en el mapa) a esta conversación.',
+      esquema: {
+        type: 'object',
+        properties: { latitud: { type: 'number' }, longitud: { type: 'number' }, titulo: { type: 'string', description: 'Nombre del lugar (opcional).' } },
+        required: ['latitud', 'longitud'],
+      },
+      ejecutar(ctx, { latitud, longitud, titulo = null }) {
+        puedeEscribir(ctx);
+        const la = Number(latitud), lo = Number(longitud);
+        if (!(la >= -90 && la <= 90 && lo >= -180 && lo <= 180)) throw new ErrorHerramienta('Coordenadas inválidas.');
+        const id = encolarAccion(ctx, 'ubicacion', { latitud: la, longitud: lo, titulo: titulo ? texto(titulo, 200) : null }, 'enviar_ubicacion');
+        return `Ubicación enviada (S-${id}).`;
+      },
+    },
+
+    enviar_contacto: {
+      descripcion: 'Manda una tarjeta de contacto (vCard) a esta conversación, para que la persona lo agende o le escriba con un toque.',
+      esquema: {
+        type: 'object',
+        properties: { nombre: { type: 'string' }, telefono: { type: 'string', description: 'Con código de país.' }, empresa: { type: 'string' } },
+        required: ['nombre', 'telefono'],
+      },
+      ejecutar(ctx, { nombre, telefono, empresa = null }) {
+        puedeEscribir(ctx);
+        const tel = soloDigitos(telefono);
+        if (tel.length < 8 || tel.length > 15) throw new ErrorHerramienta('El teléfono va con código de país (por ejemplo 5491112345678).');
+        const id = encolarAccion(ctx, 'contacto', { nombre: texto(nombre, 100), telefono: tel, empresa: empresa ? texto(empresa, 100) : null }, 'enviar_contacto');
+        return `Contacto enviado (S-${id}).`;
+      },
+    },
+
+    enviar_encuesta: {
+      descripcion: 'Manda una encuesta de WhatsApp a esta conversación (sirve mucho en grupos: elegir un horario, confirmar asistencia). Cada voto te llega como [voto en tu encuesta].',
+      esquema: {
+        type: 'object',
+        properties: {
+          pregunta: { type: 'string' },
+          opciones: { type: 'array', items: { type: 'string' }, description: 'Entre 2 y 12.' },
+          varias: { type: 'boolean', description: 'true si se puede elegir más de una.' },
+        },
+        required: ['pregunta', 'opciones'],
+      },
+      ejecutar(ctx, { pregunta, opciones, varias = false }) {
+        puedeEscribir(ctx);
+        const ops = [...new Set((opciones ?? []).map((o) => texto(o, 100)).filter(Boolean))];
+        if (ops.length < 2 || ops.length > 12) throw new ErrorHerramienta('Una encuesta lleva entre 2 y 12 opciones distintas.');
+        const id = encolarAccion(ctx, 'encuesta', { pregunta: texto(pregunta, 255), opciones: ops, varias: !!varias }, 'enviar_encuesta');
+        return `Encuesta enviada (S-${id}).`;
+      },
+    },
+
+    editar_mensaje: {
+      descripcion: 'Corrige un mensaje que ya mandaste en esta conversación (S-n o M-n tuyo). WhatsApp deja editar durante unos 15 minutos y muestra "editado".',
+      esquema: { type: 'object', properties: { mensaje: { type: 'string' }, texto: { type: 'string' } }, required: ['mensaje', 'texto'] },
+      ejecutar(ctx, { mensaje, texto: t }) {
+        puedeEscribir(ctx); soloWhatsapp(ctx);
+        const msg = texto(t, 4000);
+        if (!msg) throw new ErrorHerramienta('El texto nuevo está vacío.');
+        const id = encolarAccion(ctx, 'editar', { mensajeId: enviadoDe(ctx, mensaje), texto: msg }, 'editar_mensaje');
+        return `Editado (S-${id}).`;
+      },
+    },
+
+    borrar_mensaje: {
+      descripcion: 'Borra para todos un mensaje que mandaste en esta conversación (S-n o M-n tuyo). Usalo para corregir un error, no para esconder algo que el Propietario tiene que ver: queda en la bitácora.',
+      esquema: { type: 'object', properties: { mensaje: { type: 'string' } }, required: ['mensaje'] },
+      ejecutar(ctx, { mensaje }) {
+        puedeEscribir(ctx); soloWhatsapp(ctx);
+        const wid = enviadoDe(ctx, mensaje);
+        encolarAccion(ctx, 'borrar', { mensajeId: wid }, 'borrar_mensaje');
+        auditar(db, 'whatsapp.borrar_mensaje', { actor: String(ctx.personaOrigen ?? ctx.personaId ?? ''), rol: ctx.rol?.nombre, detalle: { chat: ctx.chatId, mensaje: String(mensaje) } });
+        return 'Borrado para todos.';
       },
     },
 
@@ -787,7 +935,7 @@ export function crearHerramientas({ db, motores = null, cuentaCodex = null, nume
     },
 
     whatsapp: {
-      descripcion: 'Solo el Propietario: acceso directo a la API de WAHA (la que conecta el número de WhatsApp). Sirve para todo lo que las otras herramientas no cubren: grupos (listar, info, participantes, crear, invitar), contactos, chats, mensajes anteriores, estados, etiquetas. La ruta usa {session} (por ejemplo GET /api/{session}/groups, GET /api/{session}/chats/<chatId>/messages?limit=20). Documentación: https://waha.devlike.pro/docs/overview/introduction/ . Para contestarle a alguien usá responder o iniciar_conversacion, así queda registrado. No se puede desvincular ni borrar la sesión desde acá.',
+      descripcion: 'Solo el Propietario: acceso directo a la API de WAHA (motor GOWS, la que conecta el número de WhatsApp). Sirve para todo lo que las otras herramientas no cubren: grupos (crear, nombre, descripción, foto, participantes, admins, invitaciones, pedidos para entrar, quién puede escribir o editar la info), contactos (foto de perfil, ver si un número tiene WhatsApp con /api/contacts/check-exists), chats (mensajes anteriores, marcar leído o no leído, foto), estados/historias (/api/{session}/status/text, image, video, voice), etiquetas (crear, asignar a chats), canales (crear, buscar, seguir), presencia (en línea, escribiendo), mensajes de evento de calendario (/api/{session}/events) y rechazar llamadas (/api/{session}/calls/reject). La ruta usa {session} (por ejemplo GET /api/{session}/groups, GET /api/{session}/chats/<chatId>/messages?limit=20). Documentación: https://waha.devlike.pro/docs/overview/introduction/ . Para contestarle a alguien usá responder o iniciar_conversacion, así queda registrado. No se puede desvincular ni borrar la sesión desde acá.',
       esquema: {
         type: 'object',
         properties: {

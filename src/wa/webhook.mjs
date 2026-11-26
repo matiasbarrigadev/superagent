@@ -86,7 +86,7 @@ export function idNucleo(p) {
   return partes.length >= 3 ? partes[2] : String(p?.id ?? '');
 }
 
-export function crearIngesta({ db, waha = null, numeros = null, config = {}, ajustes = null, alMensaje = () => {}, alAdjunto = () => {}, alCambiarEstado = () => {}, reloj = () => Date.now(), log = console }) {
+export function crearIngesta({ db, waha = null, numeros = null, config = {}, ajustes = null, alMensaje = () => {}, alAdjunto = () => {}, alEvento = () => {}, alCambiarEstado = () => {}, reloj = () => Date.now(), log = console }) {
   const insertar = db.prepare(`INSERT OR IGNORE INTO mensajes
     (session, id, chat_id, persona_id, remitente, telefono, nombre_remitente, from_me, tipo, cuerpo, tiene_adjunto,
      media_url, media_tipo, responde_a, menciona, responde_al_agente, ts, procesado, recibido, canal)
@@ -172,6 +172,55 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
     }
   }
 
+  /** Un mensaje guardado por su id de WhatsApp (completo, o solo la parte final, como lo mandan algunos motores). */
+  const qMensaje = db.prepare("SELECT seq, chat_id, from_me, cuerpo FROM mensajes WHERE id = ? OR id LIKE '%\\_' || ? ESCAPE '\\' ORDER BY seq DESC LIMIT 1");
+  const idCorto = (id) => String(id ?? '').split('_').pop();
+  const buscarMensaje = (id) => (id ? qMensaje.get(String(id), idCorto(id)) : null);
+
+  /** Reacciones, ediciones, borrados y votos de encuestas. */
+  function otroEvento(evt) {
+    const p = evt.payload ?? {};
+    const sesion = evt.session ?? 'default';
+    if (evt.event === 'message.reaction') {
+      const objetivo = p.reaction?.messageId;
+      const m = buscarMensaje(objetivo);
+      if (!m) return 'ignorado';
+      const de = normalizarJid(p.participant ?? p.from ?? '') || (p.fromMe ? 'yo' : 'alguien');
+      db.prepare(`INSERT INTO reacciones (session, chat_id, mensaje_id, de, emoji, ts) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session, mensaje_id, de) DO UPDATE SET emoji = excluded.emoji, ts = excluded.ts`)
+        .run(sesion, m.chat_id, String(objetivo), p.fromMe ? 'yo' : de, String(p.reaction?.text ?? ''), Date.now());
+      return 'reaccion';
+    }
+    if (evt.event === 'message.edited') {
+      const m = buscarMensaje(p.editedMessageId ?? p._data?.editedMessageId ?? p.id);
+      if (!m) return 'ignorado';
+      db.prepare('UPDATE mensajes SET cuerpo = ?, editado = 1 WHERE seq = ?').run(String(p.body ?? p.after?.body ?? m.cuerpo ?? ''), m.seq);
+      return 'editado';
+    }
+    if (evt.event === 'message.revoked') {
+      const m = buscarMensaje(p.revokedMessageId ?? p.before?.id ?? p.after?.id ?? p.id);
+      if (!m) return 'ignorado';
+      // Lo que la persona borró no se sigue mostrando.
+      db.prepare('UPDATE mensajes SET cuerpo = NULL, borrado = 1 WHERE seq = ?').run(m.seq);
+      return 'borrado';
+    }
+    // Voto en una encuesta que mandó el agente: le llega como evento a esa charla.
+    const idEncuesta = p.poll?.id ?? p.vote?.pollId;
+    let encuesta = buscarMensaje(idEncuesta);
+    if (!encuesta && idEncuesta) {
+      const s = db.prepare("SELECT chat_id, contenido FROM salida WHERE tipo = 'encuesta' AND (waha_id = ? OR waha_id LIKE '%\\_' || ? ESCAPE '\\')").get(String(idEncuesta), idCorto(idEncuesta));
+      if (s) { let d = {}; try { d = JSON.parse(s.contenido); } catch {} encuesta = { chat_id: s.chat_id, from_me: 1, cuerpo: `${d.pregunta ?? ''} (${(d.opciones ?? []).join(' / ')})` }; }
+    }
+    if (!encuesta || !encuesta.from_me) return 'ignorado';
+    if (numeros && !numeros.puedeResponder(encuesta.chat_id)) return 'ignorado';
+    const opciones = (p.vote?.selectedOptions ?? []).map((o) => (typeof o === 'string' ? o : o?.name ?? '')).filter(Boolean);
+    const quien = normalizarJid(p.vote?.from ?? p.vote?.participant ?? '');
+    const tel = telefonoDeJid(quien);
+    const persona = tel ? db.prepare('SELECT nombre FROM personas WHERE telefono = ?').get(tel)?.nombre : null;
+    alEvento({ chatId: encuesta.chat_id, origen: 'encuesta', texto: `[voto en tu encuesta] ${persona ?? (tel ? `+${tel}` : 'Alguien')} ${opciones.length ? `eligió: ${opciones.join(', ')}` : 'quitó su voto'}. La encuesta: ${String(encuesta.cuerpo ?? '').slice(0, 300)}` });
+    return 'voto';
+  }
+
   let meLidCache = null;
   async function meLid(me) {
     if (me?.lid) return me.lid;
@@ -189,6 +238,7 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
       alCambiarEstado(evt.payload?.status, evt);
       return 'estado';
     }
+    if (['message.reaction', 'message.edited', 'message.revoked', 'poll.vote'].includes(evt.event)) return otroEvento(evt);
     if (evt.event !== 'message.any' && evt.event !== 'message') return 'ignorado';
     const p = evt.payload ?? {};
     const fromMe = p.fromMe ? 1 : 0;

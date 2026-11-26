@@ -19,14 +19,20 @@ export function crearWaha({ url, apiKey, session, hookUrl, hmacKey, fetch: f = g
     return r;
   }
 
+  // Eventos que escucha el gateway (GOWS los soporta todos): mensajes, reacciones, ediciones, borrados y votos.
+  const EVENTOS = ['message.any', 'session.status', 'message.reaction', 'message.edited', 'message.revoked', 'poll.vote'];
   const configSesion = () => ({
     webhooks: [{
       url: hookUrl,
-      events: ['message.any', 'session.status'],
+      events: EVENTOS,
       hmac: { key: hmacKey },
       retries: { policy: 'linear', delaySeconds: 5, attempts: 15 },
     }],
   });
+
+  let eventosAlDia = false;
+  const enviar = async (ruta, cuerpo, que) => idEnviado(await llamar(ruta, { method: 'POST', body: { session, ...cuerpo } }), que);
+  const enc = (x) => encodeURIComponent(x);
 
   return {
     session,
@@ -46,6 +52,16 @@ export function crearWaha({ url, apiKey, session, hookUrl, hmacKey, fetch: f = g
       if (status === 'NO_CREADA') {
         const r = await llamar('/api/sessions', { method: 'POST', body: { name: session, start: true, config: configSesion() } });
         if (!r.ok && r.status !== 409 && r.status !== 422) throw new ErrorWaha(`No se pudo crear la sesión (${r.status}).`);
+        return;
+      }
+      // Sesiones creadas antes de sumar eventos: se actualiza el webhook una vez (WAHA reinicia la sesión, sin desvincular).
+      if (status === 'WORKING' && !eventosAlDia) {
+        const s = await llamar(`/api/sessions/${session}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        const actuales = new Set(s?.config?.webhooks?.find((w) => w.url === hookUrl)?.events ?? []);
+        if (s && EVENTOS.some((e) => !actuales.has(e))) {
+          const r = await llamar(`/api/sessions/${session}`, { method: 'PUT', body: { config: { ...(s.config ?? {}), ...configSesion() } } });
+          if (r.ok) eventosAlDia = true;
+        } else if (s) eventosAlDia = true;
         return;
       }
       if (status === 'STOPPED' || status === 'FAILED') {
@@ -113,9 +129,47 @@ export function crearWaha({ url, apiKey, session, hookUrl, hmacKey, fetch: f = g
     },
 
     // --- Salida.
-    async enviarTexto(chatId, texto, { responderA = null } = {}) {
-      const r = await llamar('/api/sendText', { method: 'POST', body: { session, chatId, text: texto, ...(responderA ? { reply_to: responderA } : {}) } });
+    async enviarTexto(chatId, texto, { responderA = null, menciones = null } = {}) {
+      const r = await llamar('/api/sendText', { method: 'POST', body: { session, chatId, text: texto, ...(responderA ? { reply_to: responderA } : {}), ...(menciones?.length ? { mentions: menciones } : {}) } });
       return idEnviado(r, 'texto');
+    },
+
+    /** Foto común de WhatsApp (se ve en el chat, no como documento). archivo: { mimetype, filename, data } */
+    enviarImagen(chatId, archivo, { epigrafe = null, responderA = null } = {}) {
+      return enviar('/api/sendImage', { chatId, file: archivo, ...(epigrafe ? { caption: epigrafe } : {}), ...(responderA ? { reply_to: responderA } : {}) }, 'foto');
+    },
+    enviarVideo(chatId, archivo, { epigrafe = null, responderA = null } = {}) {
+      return enviar('/api/sendVideo', { chatId, file: archivo, convert: true, asNote: false, ...(epigrafe ? { caption: epigrafe } : {}), ...(responderA ? { reply_to: responderA } : {}) }, 'video');
+    },
+    /** Sticker: tiene que ser WebP. */
+    enviarSticker(chatId, archivo) {
+      return enviar('/api/sendSticker', { chatId, file: archivo }, 'sticker');
+    },
+    /** Reacción a un mensaje (emoji vacío la quita). */
+    async reaccionar(mensajeId, emoji) {
+      const r = await llamar('/api/reaction', { method: 'PUT', body: { session, messageId: mensajeId, reaction: emoji } });
+      if (!r.ok) throw new ErrorWaha(`WAHA no pudo reaccionar (${r.status}).`);
+      return null;
+    },
+    enviarUbicacion(chatId, { latitud, longitud, titulo = null }) {
+      return enviar('/api/sendLocation', { chatId, latitude: latitud, longitude: longitud, ...(titulo ? { title: titulo } : {}) }, 'ubicación');
+    },
+    enviarContacto(chatId, { nombre, telefono, empresa = null }) {
+      const digitos = String(telefono).replace(/\D/g, '');
+      return enviar('/api/sendContactVcard', { chatId, contacts: [{ fullName: nombre, phoneNumber: `+${digitos}`, whatsappId: digitos, ...(empresa ? { organization: empresa } : {}) }] }, 'contacto');
+    },
+    enviarEncuesta(chatId, { pregunta, opciones, varias = false }) {
+      return enviar('/api/sendPoll', { chatId, poll: { name: pregunta, options: opciones, multipleAnswers: !!varias } }, 'encuesta');
+    },
+    async editarMensaje(chatId, mensajeId, texto) {
+      const r = await llamar(`/api/${session}/chats/${enc(chatId)}/messages/${enc(mensajeId)}`, { method: 'PUT', body: { text: texto } });
+      if (!r.ok) throw new ErrorWaha(`WAHA no pudo editar el mensaje (${r.status}).`);
+      return mensajeId;
+    },
+    async borrarMensaje(chatId, mensajeId) {
+      const r = await llamar(`/api/${session}/chats/${enc(chatId)}/messages/${enc(mensajeId)}`, { method: 'DELETE' });
+      if (!r.ok) throw new ErrorWaha(`WAHA no pudo borrar el mensaje (${r.status}).`);
+      return mensajeId;
     },
 
     /** archivo: { mimetype, filename, data (base64) } */

@@ -7,7 +7,7 @@ description: Instalar, levantar, deployar o actualizar un Superagent (agente de 
 
 Un Superagent son dos servicios:
 
-- **`waha`**: WhatsApp (imagen `devlikeapro/waha:gows-2026.9.2`, motor GOWS). Nunca se expone a internet.
+- **`waha`**: WhatsApp (imagen `devlikeapro/waha:gows-2026.10.1`, motor GOWS). Nunca se expone a internet.
 - **`superagent`**: la imagen publicada `ghcr.io/matiasbarrigadev/superagent:<versión>` (amd64 y arm64). Gateway +
   panel + Claude Code. Puerto 8080, healthcheck `/salud`.
 
@@ -53,7 +53,7 @@ railway init --name superagent            # o `railway link` a un proyecto exist
 
 # Servicio 1: waha (el nombre "waha" es obligatorio: el gateway lo busca en waha.railway.internal:3000)
 KEY=$(openssl rand -hex 32); PASS=$(openssl rand -hex 24)
-railway add --service waha --image devlikeapro/waha:gows-2026.9.2 \
+railway add --service waha --image devlikeapro/waha:gows-2026.10.1 \
   --variables "PORT=3000" --variables "WAHA_API_KEY=$KEY" \
   --variables "WHATSAPP_DEFAULT_ENGINE=GOWS" --variables "WHATSAPP_RESTART_ALL_SESSIONS=True" \
   --variables "WAHA_DASHBOARD_ENABLED=False" --variables "WHATSAPP_SWAGGER_ENABLED=False" \

@@ -8,6 +8,12 @@ con él por WhatsApp.
   `supabase`…), MCPs, procesos en segundo plano, acceso total a WhatsApp. La aprobación está en el diálogo.
 - **Con los demás** aplica roles que definís con él en la conversación: qué puede hacer cada persona, qué grupos
   escucha, con quién puede iniciar una conversación. Lo que pide un rol inferior te lo consulta a vos por WhatsApp.
+- **Usa WhatsApp a fondo**: cita mensajes, reacciona con emojis, manda fotos como foto o como documento, videos,
+  stickers, ubicaciones, contactos y encuestas (y se entera de cada voto), corrige o borra lo que mandó, y menciona
+  en grupos. Con vos tiene además toda la API de WhatsApp: grupos, estados, etiquetas, canales y más. Ver
+  [docs/WHATSAPP.md](docs/WHATSAPP.md).
+- **Bandeja en el panel**: todas las conversaciones como en WhatsApp, con fotos, audios, videos y PDF a la vista,
+  reacciones, mensajes editados o borrados, y cualquier otro archivo para descargar.
 - **Escucha todo** lo que llega a WhatsApp y se despierta según quién escribe: directos, grupos activos (decide por
   contexto si le hablan a él), tareas en segundo plano que terminan, rutinas y webhooks.
 - **Cuida el consumo**: ve el uso de tu plan de Claude en cada iteración, compacta el contexto y avisa a quien

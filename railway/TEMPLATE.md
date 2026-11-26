@@ -18,7 +18,9 @@ Template publicado: <https://railway.com/deploy/superagente-en-whatsapp>
    `SUPERAGENT_SETUP_SIN_CODIGO_MIN` (0 = pedir siempre el código).
 3. En el panel: nombre, email, contraseña y app de códigos (TOTP). Guardar los 10 códigos de recuperación.
 4. **Inicio → Claude → Conectar Claude**: se abre `claude setup-token`; autorizar con la cuenta de Claude y pegar el
-   código. Queda guardado cifrado.
+   código. Queda guardado cifrado. Sin suscripción de Claude, también sirve una clave de API (`ANTHROPIC_API_KEY`) u
+   otro motor (Codex con ChatGPT, Gemini, OpenCode con DeepSeek…): se configura en **Motores de IA** (ver
+   [docs/MOTORES.md](../docs/MOTORES.md)).
 5. **Inicio → WhatsApp**: escanear el QR con el teléfono del número del agente, o pedir el código de vinculación.
 6. **Inicio → Verificar tu número**: tu WhatsApp personal. Al verificarlo, el agente te escribe por WhatsApp para
    configurarse con vos.
@@ -33,7 +35,7 @@ En Railway: **Templates → New Template**. Agregar dos servicios con estos valo
 ### Servicio 1: `waha`
 
 - **Nombre**: `waha` (exacto: el gateway lo busca como `waha.railway.internal`).
-- **Source**: Docker image `devlikeapro/waha:gows-2026.9.2`.
+- **Source**: Docker image `devlikeapro/waha:gows-2026.10.1`.
 - **Volumen**: `/app/.sessions` (ahí queda la sesión de WhatsApp: sin volumen, cada reinicio pide QR nuevo).
 - **Restart policy**: Always.
 - **Public networking**: ninguno.

@@ -12,7 +12,7 @@ import { montarPanel, PREFIJOS_PANEL } from './rutas/panel.mjs';
 import { SECCIONES_PANEL, accesosDe, puedeRuta } from './auth/accesos.mjs';
 
 const COOKIE = 'sa_sesion';
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 
 export function crearApp({ db, config, auth, waha, claude, nucleo, upgradeWebSocket = null, log = console }) {
   const app = new Hono();
@@ -33,9 +33,12 @@ export function crearApp({ db, config, auth, waha, claude, nucleo, upgradeWebSoc
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'no-referrer');
-    c.header('X-Frame-Options', 'DENY');
-    c.header('Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    // Una ruta puede poner las suyas, más estrictas (por ejemplo los adjuntos de la bandeja, que se muestran en el panel).
+    if (!c.res.headers.get('X-Frame-Options')) c.header('X-Frame-Options', 'DENY');
+    if (!c.res.headers.get('Content-Security-Policy')) {
+      c.header('Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    }
   });
 
   // --- Errores conocidos → JSON con mensaje para la persona.

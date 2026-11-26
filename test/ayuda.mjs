@@ -18,7 +18,6 @@ export function wahaFalso(extra = {}) {
     enviados,
     estado: async () => ({ status: 'SCAN_QR_CODE', me: null }),
     asegurar: async () => {},
-    enviarTexto: async (chatId, texto) => { enviados.push({ chatId, texto }); return `id-${enviados.length}`; },
     escribiendo: async () => {},
     telefonoDeLid: async () => null,
     lidDeTelefono: async () => null,
@@ -26,6 +25,16 @@ export function wahaFalso(extra = {}) {
     pedirCodigo: async () => ({ codigo: 'ABCD-1234' }),
     qr: async () => ({ tipo: 'image/png', datos: Buffer.from('png') }),
     enviarArchivo: async (chatId, archivo) => { enviados.push({ chatId, archivo: archivo.filename }); return `id-${enviados.length}`; },
+    enviarTexto: async (chatId, texto, o = {}) => { enviados.push({ chatId, texto, ...(o.responderA ? { responderA: o.responderA } : {}), ...(o.menciones ? { menciones: o.menciones } : {}) }); return `true_${chatId}_ENV${enviados.length}`; },
+    enviarImagen: async (chatId, archivo, o = {}) => { enviados.push({ chatId, imagen: archivo.filename, epigrafe: o.epigrafe ?? null }); return `true_${chatId}_ENV${enviados.length}`; },
+    enviarVideo: async (chatId, archivo) => { enviados.push({ chatId, video: archivo.filename }); return `true_${chatId}_ENV${enviados.length}`; },
+    enviarSticker: async (chatId, archivo) => { enviados.push({ chatId, sticker: archivo.filename }); return `true_${chatId}_ENV${enviados.length}`; },
+    reaccionar: async (mensajeId, emoji) => { enviados.push({ reaccion: emoji, mensajeId }); return null; },
+    enviarUbicacion: async (chatId, d) => { enviados.push({ chatId, ubicacion: d }); return `true_${chatId}_ENV${enviados.length}`; },
+    enviarContacto: async (chatId, d) => { enviados.push({ chatId, contacto: d }); return `true_${chatId}_ENV${enviados.length}`; },
+    enviarEncuesta: async (chatId, d) => { enviados.push({ chatId, encuesta: d }); return `true_${chatId}_ENV${enviados.length}`; },
+    editarMensaje: async (chatId, mensajeId, texto) => { enviados.push({ chatId, editar: mensajeId, texto }); return mensajeId; },
+    borrarMensaje: async (chatId, mensajeId) => { enviados.push({ chatId, borrar: mensajeId }); return mensajeId; },
     borrar: async () => {},
     ...extra,
   };
@@ -114,6 +123,8 @@ export function armar({ waha = {}, claude = {}, guion = undefined, ahora = 1_800
 
   return {
     db, config, app, pedir, nucleo, waha: w, otrosWa, corridas: falso.corridas, tiempo, avanzar,
+    // La respuesta tal cual (con encabezados), con la sesión del panel.
+    pedirCrudo: (metodo, ruta) => app.request(ruta, { method: metodo, headers: { Host: 'localhost', ...(cookie ? { Cookie: cookie } : {}) } }),
     olvidarCookie: () => { cookie = ''; },
     limpiar: () => fs.rmSync(dataDir, { recursive: true, force: true }),
   };
