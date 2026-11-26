@@ -68,6 +68,14 @@ export default function Adjunto({ a }) {
   const [abierto, setAbierto] = useState(false);
   if (!a) return null;
   if (a.estado === 'pendiente') return <p className="mb-1 flex items-center gap-2 text-xs text-stone-500"><Girando className="size-3.5" /> Descargando adjunto…</p>;
+  if (a.estado === 'vencido') {
+    return (
+      <div className="mb-1 text-xs text-stone-500 dark:text-stone-400">
+        <p className="flex items-center gap-1.5"><IconoAdjunto className="size-3.5" /> {a.nombre ?? 'Adjunto'}: se borró por antigüedad para liberar espacio.</p>
+        {a.texto && <details className="mt-1"><summary className="cursor-pointer select-none">Texto que se había extraído</summary><p className="mt-1 whitespace-pre-wrap">{a.texto}</p></details>}
+      </div>
+    );
+  }
   if (a.estado !== 'listo') return <p className="mb-1 flex items-center gap-1.5 text-xs text-stone-500"><IconoAdjunto className="size-3.5" /> {a.nombre ?? 'Adjunto'} (no se pudo descargar)</p>;
   const url = `/api/inbox/adjunto/${a.id}`;
   const descargar = `${url}?descargar=1`;

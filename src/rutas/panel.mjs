@@ -138,6 +138,20 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     auditar(db, 'motores.configurar', { actor: c.get('sesion').email });
     return c.json({ ok: true, ...nucleo.motores.estado() });
   });
+  // --- Disco: uso del volumen, qué ocupa, limpieza y su configuración.
+  app.get('/api/disco', (c) => (nucleo.disco ? c.json(nucleo.disco.estado()) : c.json({ error: 'No disponible.' }, 404)));
+  app.post('/api/disco/limpiar', async (c) => {
+    const b = await cuerpo(c);
+    const r = nucleo.disco.limpiar({ simular: !!b.simular });
+    if (!b.simular) auditar(db, 'disco.limpiar', { actor: c.get('sesion').email, detalle: { liberado: r.liberado } });
+    return c.json({ ...r, ...nucleo.disco.estado() });
+  });
+  app.patch('/api/disco', async (c) => {
+    try { nucleo.disco.configurar(await cuerpo(c)); } catch (e) { return c.json({ error: e.message }, 400); }
+    auditar(db, 'disco.configurar', { actor: c.get('sesion').email });
+    return c.json(nucleo.disco.estado());
+  });
+
   app.post('/api/motores/codex/login', async (c) => {
     try { return c.json(await nucleo.cuentaCodex.iniciarLogin()); } catch (e) { return c.json({ error: e.message }, 500); }
   });
@@ -620,4 +634,4 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
 }
 
 export const PREFIJOS_PANEL = ['/api/resumen', '/api/personas', '/api/roles', '/api/ajustes', '/api/modelos', '/api/equipo', '/api/chats', '/api/chat', '/api/inbox',
-  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes', '/api/motores'];
+  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes', '/api/motores', '/api/disco'];

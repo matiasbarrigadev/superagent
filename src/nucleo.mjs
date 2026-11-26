@@ -33,6 +33,7 @@ import { crearAdaptadorCodex, crearCuentaCodex } from './engine/codex.mjs';
 import { crearAdaptadorGemini } from './engine/gemini.mjs';
 import { crearEjecutorComun } from './engine/ejecutor.mjs';
 import { crearMotores } from './engine/motores.mjs';
+import { crearDisco } from './servicios/disco.mjs';
 import { crearMotor } from './engine/motor.mjs';
 import { crearProgramador } from './rutinas/programador.mjs';
 import { proxima } from './rutinas/cron.mjs';
@@ -203,9 +204,11 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
   };
   const motores = crearMotores({ ajustes, adaptadores, cuenta: cuentaClaude, reloj,
     gasto: (motor, desde) => db.prepare('SELECT COALESCE(SUM(costo_usd), 0) AS g FROM corridas WHERE credencial_usada = ? AND inicio >= ?').get(motor, desde).g });
-  const herramientas = crearHerramientas({ db, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  // Disco: limpieza automática, aviso al llenarse y lo que ve el agente para cuidar su espacio.
+  const disco = config.dataDir ? crearDisco({ db, config, ajustes, aislamiento: ais, avisos, despertarPropietarios, reloj, log }) : null;
+  const herramientas = crearHerramientas({ db, disco, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
-  const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, avisos, aislamiento: ais, conectores, roles, numeros });
+  const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
   const motor = crearMotor({ db, config,
     // Una rutina que falla por algo técnico: el agente se lo cuenta a los Propietarios.
@@ -283,7 +286,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

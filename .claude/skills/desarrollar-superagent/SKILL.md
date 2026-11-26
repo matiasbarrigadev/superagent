@@ -59,6 +59,10 @@ tabla de soporte en la doc de WAHA), el tipo en la cola (`src/wa/salida.mjs` y e
 una migración) y la herramienta en `herramientas.mjs`, que solo acepta marcas `M-n`/`S-n` de la conversación en
 curso. Docs: [docs/WHATSAPP.md](../../../docs/WHATSAPP.md).
 
+**Algo que guarda archivos en `/data`**: que tenga dueño y fecha, y que `src/servicios/disco.mjs` sepa limpiarlo o
+mostrarlo en el desglose. La limpieza solo borra lo que ya cumplió su función; nunca la base, los secretos, las
+charlas en curso ni el entorno del Propietario. Docs: [docs/DISCO.md](../../../docs/DISCO.md).
+
 **Agregar un permiso**: actualizá también el test de la matriz de roles (`test/roles.test.mjs`, cuenta del catálogo).
 
 **Cambiar la base**: nueva migración `src/db/migraciones/NNN_nombre.sql` (siguiente número, nunca edites una ya

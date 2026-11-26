@@ -63,10 +63,10 @@ const PANEL_FUERA = [/^\/api\/(auth|setup|recuperar|invitacion|estado)(\/|$)/, /
 export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((re) => re.test(ruta)) && !(metodo === 'POST' && /^\/api\/entorno\/?$/.test(ruta))
   // Sumar o quitar un número de WhatsApp es vincular: se hace en el panel (su política, conversando).
   && !(metodo !== 'GET' && /^\/api\/whatsapp\/numeros(\/|$)/.test(ruta))
-  // Los motores se cambian con configurar_motores (ficha y confirmación en otro mensaje).
-  && !(metodo !== 'GET' && /^\/api\/motores(\/|$)/.test(ruta));
+  // Los motores y el disco se cambian con sus herramientas (ficha y confirmación en otro mensaje).
+  && !(metodo !== 'GET' && /^\/api\/(motores|disco)(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, disco = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -1142,6 +1142,56 @@ Mostráselo al Propietario (con lo que cuesta cada uno y lo que falta cargar) y 
         return `Listo, quedó así:
 ${motores.ficha()}
 Las charlas que cambian de motor arrancan una conversación nueva (con la memoria de siempre).`;
+      },
+    },
+
+    disco: {
+      descripcion: 'Solo el Propietario, en su charla: el disco de datos (el volumen donde vive todo). "ver" da cuánto se usa, qué ocupa más (cada charla, trabajo, tu entorno, adjuntos, repos, base) y cómo está la limpieza automática. "simular" dice qué borraría la limpieza automática sin tocar nada; "limpiar" la corre ahora (carpetas de trabajos terminados, adjuntos y archivos enviados viejos, temporales). "configurar" cambia los días que se guardan los adjuntos (0 = siempre), el % del aviso y si la limpieza automática está prendida: muestra la ficha y se aplica con confirmado: true en un mensaje nuevo. Para ordenar tu propio entorno (dependencias, builds, repos o apps que ya no usás) usá tu terminal: du -sh, y borrá solo lo que se puede regenerar o lo que el Propietario aprobó.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['ver', 'simular', 'limpiar', 'configurar'] },
+          dias_adjuntos: { type: 'integer', description: 'Para configurar: días que se guardan adjuntos y archivos enviados (0 = siempre).' },
+          umbral: { type: 'integer', description: 'Para configurar: % del disco al que te aviso (50 a 99).' },
+          automatica: { type: 'boolean', description: 'Para configurar: limpieza automática cada hora.' },
+          confirmado: { type: 'boolean' },
+        },
+        required: ['accion'],
+      },
+      ejecutar(ctx, { accion, dias_adjuntos: diasAdjuntos, umbral, automatica, confirmado = false }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, maneja el disco.');
+        if (!disco) throw new ErrorHerramienta('El disco no está disponible en esta instalación.');
+        const leg = (b) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
+        if (accion === 'ver') {
+          const e = disco.estado();
+          const c = e.config;
+          return `Disco: ${leg(e.volumen.usado)} de ${leg(e.volumen.total)} (${e.volumen.pct}%), libres ${leg(e.volumen.libre)}.\nLo que ocupa:\n${e.desglose.slice(0, 15).map((p) => `- ${p.nombre}: ${leg(p.tamano)}`).join('\n')}\nLimpieza automática: ${c.automatica ? 'prendida, cada hora' : 'apagada'}; adjuntos y archivos enviados: ${c.diasAdjuntos ? `${c.diasAdjuntos} días` : 'se guardan siempre'}; aviso al ${c.umbral}%.${e.ultimaLimpieza ? ` Última limpieza: ${new Date(e.ultimaLimpieza.en).toISOString().slice(0, 16)} UTC, ${leg(e.ultimaLimpieza.liberado)} liberados.` : ''}`;
+        }
+        if (accion === 'simular' || accion === 'limpiar') {
+          const r = disco.limpiar({ simular: accion === 'simular' });
+          if (!r.acciones.length) return 'La limpieza automática no tiene nada para borrar ahora. Si hace falta más espacio, mirá tu entorno con du -sh o proponé ampliar el volumen.';
+          return `${accion === 'simular' ? 'Borraría' : 'Listo, borré'} ${leg(r.liberado)}: ${r.acciones.join('; ')}.`;
+        }
+        if (accion !== 'configurar') throw new ErrorHerramienta('Acción desconocida.');
+        const cambios = Object.fromEntries(Object.entries({ diasAdjuntos, umbral, automatica }).filter(([, v]) => v !== undefined));
+        if (!Object.keys(cambios).length) throw new ErrorHerramienta('No hay cambios.');
+        const firma = JSON.stringify(cambios);
+        const clave = `disco|${ctx.personaId}`;
+        const previa = fichasMostradas.get(clave);
+        if (!confirmado || !previa || previa.firma !== firma) {
+          fichasMostradas.set(clave, { corridaId: ctx.corridaId, ts: reloj(), firma });
+          const partes = [];
+          if (cambios.diasAdjuntos !== undefined) partes.push(cambios.diasAdjuntos ? `los adjuntos y archivos enviados se borran a los ${cambios.diasAdjuntos} días (queda su texto extraído)` : 'los adjuntos se guardan siempre');
+          if (cambios.umbral !== undefined) partes.push(`aviso al ${cambios.umbral}% del disco`);
+          if (cambios.automatica !== undefined) partes.push(cambios.automatica ? 'limpieza automática prendida' : 'limpieza automática apagada');
+          return `Todavía no se cambió nada. Quedaría: ${partes.join('; ')}. Preguntale al Propietario si lo confirma; si confirma en un mensaje nuevo, repetí con confirmado: true.`;
+        }
+        if (previa.corridaId === ctx.corridaId) throw new ErrorHerramienta('El Propietario todavía no lo confirmó: esperá su respuesta.');
+        fichasMostradas.delete(clave);
+        let c;
+        try { c = disco.configurar(cambios); } catch (e) { throw new ErrorHerramienta(e.message); }
+        auditar(db, 'disco.configurar', { actor: String(ctx.personaId ?? ''), detalle: cambios });
+        return `Listo: adjuntos ${c.diasAdjuntos ? `${c.diasAdjuntos} días` : 'siempre'}, aviso al ${c.umbral}%, limpieza automática ${c.automatica ? 'prendida' : 'apagada'}.`;
       },
     },
 

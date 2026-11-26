@@ -13,7 +13,7 @@ const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 // Lo que el agente tiene que saber de su entorno para levantar y compartir apps (modo completo).
 const APPS = (url) => `Tu entorno y tus apps: vivís en un servidor propio (un contenedor Linux siempre encendido, hoy en Railway) con Node, Python, git y tu disco persistente (tu HOME queda entre reinicios; lo que esté fuera de tu HOME no). Es tu "localhost" con URL pública: lo que levantes en un puerto local lo publicás con la herramienta apps y queda en ${url || '<url pública>'}/apps/<nombre>/, en vivo (si cambiás el código con el servidor de desarrollo corriendo, el cambio se ve al instante). Podés crear lo que te pidan, libremente: un sistema completo (un CRM con su base, un panel a medida), una herramienta chica (calculadora, simulador, formulario, informe interactivo) o lo que sea; cada cosa con su nombre y su link para compartir con quien corresponda. Configurá la app para servir bajo /apps/<nombre> (te llega como BASE_PATH) y escuchar en localhost en el puerto que elijas (te llega como PORT si le das el comando a apps, que además la vuelve a levantar sola). Datos: SQLite o archivos dentro de tu HOME, o un servicio externo si hace falta. La URL es pública: si piden contraseña, login o acceso por persona, construilo en la app. Escala: el servidor es compartido (CPU y memoria) y es ideal para apps de negocio de uso interno o de clientes (decenas o cientos de usuarios), no para algo masivo. Si te piden algo que tiene que escalar mucho o recibir mucho tráfico público, explicalo con honestidad y proponé opciones: subir el plan del servidor o desplegarlo aparte (Vercel, Supabase, otro proyecto de Railway) con lo que tengas conectado. Cuidá los recursos: bajá (apps quitar y matá el proceso) lo que ya no se use.`;
 
-export function crearArmador({ db, config, politica, ajustes, memoria, entorno = null, consumo = null, avisos, aislamiento, conectores = null, roles = null, numeros = null, dirInstrucciones = DIR_AGENTE }) {
+export function crearArmador({ db, config, politica, ajustes, memoria, entorno = null, consumo = null, disco = null, avisos, aislamiento, conectores = null, roles = null, numeros = null, dirInstrucciones = DIR_AGENTE }) {
   const cacheInstr = new Map();
   function instruccion(variante) {
     if (!cacheInstr.has(variante)) {
@@ -71,7 +71,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
       if (puede('iniciar_conversacion')) gateway.push('iniciar_conversacion');
       if (puede('publicar')) gateway.push('publicar');
       if (variante === 'onboarding') gateway.push('terminar_onboarding');
-      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'vincular_numero', 'configurar_sesion', 'configurar_motores', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
+      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'vincular_numero', 'configurar_sesion', 'configurar_motores', 'disco', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
       if (decidir('ver_consumo').decision === 'permitir') gateway.push('consumo');
       gateway.push('reiniciar_contexto');
       if (puede('agregar_conector') || puede('conectar_mis_cuentas')) gateway.push('agregar_conector');
@@ -119,7 +119,10 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
     let t = `[${hora(m.ts * 1000)}${marca}] ${quien}${rolNombre ? ` (${rolNombre})` : ''}: ${m.borrado ? '(borró este mensaje)' : m.cuerpo || ''}${m.editado ? ' (editado)' : ''}`;
     if (m.tiene_adjunto) {
       const a = db.prepare('SELECT id, tipo, ruta, estado, texto FROM adjuntos WHERE mensaje_seq = ?').get(m.seq);
-      if (!a || !a.ruta || a.estado === 'fallido') {
+      if (a?.estado === 'vencido') {
+        t += `\n  (adjunto: ${a.tipo}, el archivo ya se borró por antigüedad${a.texto ? '; queda su texto' : ''})`;
+        if (a.texto) t += `\n  <dato_externo tipo="${a.tipo}">\n${a.texto.slice(0, 12_000)}\n  </dato_externo>`;
+      } else if (!a || !a.ruta || a.estado === 'fallido') {
         t += `\n  (adjunto: ${a?.tipo ?? m.media_tipo ?? 'archivo'}, no se pudo descargar)`;
       } else {
         t += `\n  (adjunto: ${a.tipo}`;
@@ -269,6 +272,10 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
     if (consumo && variante !== 'tercero' && decidir('ver_consumo').decision === 'permitir') {
       const ultima = chatId ? db.prepare('SELECT contexto_tokens FROM corridas WHERE chat_id = ? AND contexto_tokens IS NOT NULL ORDER BY id DESC LIMIT 1').get(chatId) : null;
       ctx.push(consumo.linea({ contexto: ultima?.contexto_tokens ?? null }));
+    }
+    // Disco: el Propietario y los trabajos lo ven siempre, para cuidar el espacio mientras trabajan.
+    if (disco && (completo || tipo === 'trabajo' || tipo === 'sesion')) {
+      try { const l = disco.linea(); if (l) ctx.push(l); } catch {}
     }
     if (h.claude.length) ctx.push(`Tu carpeta de trabajo: ${rutas.trabajo}. Archivos para mandar: ${rutas.salida}. Plantillas: ${path.join(dirInstrucciones, 'plantillas')}.${completo ? ` Guías (por ejemplo IMPORTAR.md, el formato de paquetes): ${path.join(dirInstrucciones, '..', 'docs')}.` : ''}`);
     let entornoExtra = null;

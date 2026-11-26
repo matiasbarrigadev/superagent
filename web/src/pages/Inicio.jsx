@@ -8,6 +8,7 @@ import Claude from '../components/Claude.jsx';
 import Pendientes from '../components/Pendientes.jsx';
 import MiNumero from '../components/MiNumero.jsx';
 import Consumo from '../components/Consumo.jsx';
+import Disco from '../components/Disco.jsx';
 import { IconoCheck } from '../components/iconos.jsx';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
@@ -137,6 +138,7 @@ export default function Inicio({ resumen, irA, usuario }) {
         <div id="whatsapp" className="scroll-mt-6"><WhatsApp pie={r?.yo?.verificada ? <SumarNumero /> : null} /></div>
         {r?.yo?.verificada && <div id="otros-numeros" className="scroll-mt-6 lg:col-span-2"><OtrosNumeros /></div>}
         <div className="lg:col-span-2"><Consumo /></div>
+        <div id="disco" className="scroll-mt-6 lg:col-span-2"><Disco /></div>
         {r?.yo?.verificada && <div id="mi-numero" className="scroll-mt-6 lg:col-span-2"><MiNumero yo={r.yo} alCambiar={resumen.cargar} /></div>}
       </div>
       {!urgente && <Pendientes />}

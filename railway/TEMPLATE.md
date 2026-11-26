@@ -103,7 +103,7 @@ Cualquiera de estas se puede pisar con su variable (`SUPERAGENT_PUBLIC_URL`, `SU
 |---|---|---|
 | RAM | 2 GB mínimo; 4 GB con trabajos de código y navegador a la vez | 512 MB |
 | CPU | 2 vCPU (audios y Chromium) | 1 vCPU |
-| Volumen | 5 GB para empezar | 1 GB |
+| Volumen | 5 GB para empezar; 20 GB o más si trabaja con código (se amplía en vivo y se cobra solo lo usado) | 1 GB |
 
 ## Opcionales (variables de `superagent`)
 

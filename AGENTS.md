@@ -92,6 +92,7 @@ railway/TEMPLATE.md                 receta del template de Railway
 docker-compose.yml                  instalación con la imagen publicada (docker-compose.desarrollo.yml: construir desde el repo)
 docs/IMPORTAR.md                    formato de paquetes para traer trabajo previo o mudar una instalación
 docs/NUMEROS.md                     varios números de WhatsApp y la política de cada uno
+docs/DISCO.md                       el volumen de datos: limpieza automática, aviso al 80 % y cómo lo cuida el agente
 docs/WHATSAPP.md                    todo lo que el agente hace en WhatsApp y lo que muestra la bandeja
 docs/MOTORES.md                     motores de IA (Claude, Codex, Gemini, OpenCode), respaldo, topes y cómo se elige cada uno
 ```

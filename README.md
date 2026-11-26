@@ -14,6 +14,8 @@ con él por WhatsApp.
   [docs/WHATSAPP.md](docs/WHATSAPP.md).
 - **Bandeja en el panel**: todas las conversaciones como en WhatsApp, con fotos, audios, videos y PDF a la vista,
   reacciones, mensajes editados o borrados, y cualquier otro archivo para descargar.
+- **Cuida su disco**: limpia solo lo que ya cumplió su función (trabajos terminados, adjuntos viejos, temporales),
+  avisa al 80 % y el agente ordena su propio espacio con criterio. Ver [docs/DISCO.md](docs/DISCO.md).
 - **Escucha todo** lo que llega a WhatsApp y se despierta según quién escribe: directos, grupos activos (decide por
   contexto si le hablan a él), tareas en segundo plano que terminan, rutinas y webhooks.
 - **Cuida el consumo**: ve el uso de tu plan de Claude en cada iteración, compacta el contexto y avisa a quien

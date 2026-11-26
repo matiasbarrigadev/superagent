@@ -187,4 +187,5 @@ versión nueva en Releases.
 | Los mensajes no llegan al agente | WAHA no alcanza al gateway por la red interna: mirá los logs de `waha` (reintentos de webhook) y, fuera de Railway/compose, fijá `SUPERAGENT_INTERNAL_URL` |
 | El QR expira | Normal: se regenera; escanearlo dentro del minuto |
 | Los links del agente no abren en el teléfono | `SUPERAGENT_PUBLIC_URL` apunta a `localhost` |
+| El disco se llena | Lo normal al principio (clones, dependencias, adjuntos). La limpieza automática y el aviso al 80 % están prendidos; si hace falta, ampliar el volumen en Railway. Ver [docs/DISCO.md](../../../docs/DISCO.md) |
 | Un motor (Codex, Gemini, OpenCode) no responde | Falta su clave o llegó a su límite: el panel → **Motores de IA** muestra qué falta; sin respaldo, esas charlas esperan y llega un aviso |

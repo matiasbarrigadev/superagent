@@ -86,8 +86,11 @@ const reloj = setInterval(() => nucleo.motor.tick(), 1000);
 const limpieza = setInterval(() => {
   try { const n = nucleo.numeros.limpiar(); if (n) console.log(`[whatsapp] ${n} mensaje(s) vencidos borrados`); } catch (e) { console.warn('[whatsapp] limpieza', e.message); }
   for (const x of nucleo.numeros.listar()) vigiaDe(x.nombre);
+  try { nucleo.disco?.revisar(); } catch (e) { console.warn('[disco]', e.message); }
 }, 3_600_000);
 limpieza.unref?.();
+// La primera revisión del disco, un rato después de arrancar (sin frenar el arranque).
+setTimeout(() => { try { nucleo.disco?.revisar(); } catch (e) { console.warn('[disco]', e.message); } }, 120_000).unref?.();
 
 // Al arrancar, se deja lista la sesión de WhatsApp (si WAHA ya responde).
 // WAHA puede tardar en arrancar: se reintenta cada 5 s durante 3 minutos.
