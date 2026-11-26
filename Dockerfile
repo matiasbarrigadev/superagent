@@ -31,6 +31,9 @@ RUN git clone --depth 1 --branch "${WHISPER_VERSION}" https://github.com/ggml-or
 # --- Imagen final
 FROM node:24-bookworm-slim
 ARG CLAUDE_CODE_VERSION=2.1.331
+# OpenCode (motor para DeepSeek, MiniMax, OpenRouter…): versión 1 fija. La 2 cambió la config y no deja cargar
+# claves sin una terminal interactiva; se actualiza a mano después de probarla.
+ARG OPENCODE_VERSION=1.19.6
 ARG PLAYWRIGHT_MCP_VERSION=0.0.84
 # CLIs de la publicación (etapa 8c); gh viene de apt.
 ARG WRANGLER_VERSION=4.158.0
@@ -51,7 +54,7 @@ RUN apt-get update \
 COPY --from=whisper /opt/whisper /opt/whisper
 
 RUN npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
-      "wrangler@${WRANGLER_VERSION}" "vercel@${VERCEL_VERSION}" "supabase@${SUPABASE_VERSION}" \
+      "opencode-ai@${OPENCODE_VERSION}" "wrangler@${WRANGLER_VERSION}" "vercel@${VERCEL_VERSION}" "supabase@${SUPABASE_VERSION}" \
  && npm cache clean --force
 
 # "agente" solo corre el login de Claude. Cada conversación corre con su propio usuario, creado al vuelo.

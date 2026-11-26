@@ -19,12 +19,20 @@ export function crearConsumo({ db, ajustes, politica, salida = null, avisos = nu
 
   function suma(desde) {
     return db.prepare(`SELECT COUNT(*) AS corridas, COALESCE(SUM(tokens_entrada), 0) AS entrada, COALESCE(SUM(tokens_cache), 0) AS cache,
-      COALESCE(SUM(tokens_salida), 0) AS salida, COALESCE(SUM(costo_usd), 0) AS costo FROM corridas WHERE inicio >= ? AND costo_usd IS NOT NULL`).get(desde);
+      COALESCE(SUM(tokens_salida), 0) AS salida, COALESCE(SUM(costo_usd), 0) AS costo,
+      COALESCE(SUM(CASE WHEN credencial_usada IN ('claude-api', 'opencode') THEN costo_usd END), 0) AS gasto
+      FROM corridas WHERE inicio >= ? AND costo_usd IS NOT NULL`).get(desde);
+  }
+
+  /** Gasto real (motores que cobran por uso) de los últimos 30 días, por motor. */
+  function porMotor() {
+    return db.prepare(`SELECT credencial_usada AS motor, COUNT(*) AS corridas, COALESCE(SUM(costo_usd), 0) AS costo FROM corridas
+      WHERE inicio >= ? AND costo_usd IS NOT NULL AND credencial_usada IN ('claude-api', 'opencode') GROUP BY credencial_usada`).all(reloj() - 30 * 24 * HORA);
   }
 
   function local() {
     const ahora = reloj();
-    return { cincoHoras: suma(ahora - 5 * HORA), semana: suma(ahora - 7 * 24 * HORA) };
+    return { cincoHoras: suma(ahora - 5 * HORA), semana: suma(ahora - 7 * 24 * HORA), porMotor: porMotor() };
   }
 
   const k = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -37,6 +45,8 @@ export function crearConsumo({ db, ajustes, politica, salida = null, avisos = nu
     const partes = [];
     if (p?.cincoHoras?.pct != null) partes.push(`plan: ${Math.round(p.cincoHoras.pct)}% de las 5 h${p.cincoHoras.reinicia ? ` (se renueva ${horaDe(p.cincoHoras.reinicia)})` : ''}${p.semana?.pct != null ? `, ${Math.round(p.semana.pct)}% de la semana` : ''}`);
     partes.push(`últimas 5 h: ${l.cincoHoras.corridas} corridas, ${k(l.cincoHoras.entrada + l.cincoHoras.cache + l.cincoHoras.salida)} tokens (≈ US$ ${l.cincoHoras.costo.toFixed(2)} a precio de API)`);
+    const gasto = l.porMotor.reduce((s, m) => s + m.costo, 0);
+    if (gasto > 0) partes.push(`gasto real por API en 30 días: US$ ${gasto.toFixed(2)} (${l.porMotor.map((m) => `${m.motor} US$ ${m.costo.toFixed(2)}`).join(', ')})`);
     if (contexto) partes.push(`contexto de esta conversación: ${k(contexto)} tokens (se compacta solo al ${ajustes.num('compactar_pct', 60)}%)`);
     return `Consumo de Claude: ${partes.join('; ')}.`;
   }

@@ -44,8 +44,13 @@ export default function Consumo() {
           <div><dt className="text-xs text-stone-500 dark:text-stone-400">Equivale a (5 h)</dt><dd className="font-medium tabular-nums">US$ {local.cincoHoras.costo.toFixed(2)}</dd></div>
           <div><dt className="text-xs text-stone-500 dark:text-stone-400">Semana</dt><dd className="font-medium tabular-nums">US$ {local.semana.costo.toFixed(2)}</dd></div>
         </dl>
+        {local.porMotor?.length > 0 && (
+          <p className="text-sm text-stone-700 dark:text-stone-300">
+            Gasto real por uso (30 días): {local.porMotor.map((m) => `${m.motor === 'opencode' ? 'OpenCode' : 'Claude con clave de API'} US$ ${m.costo.toFixed(2)} (${m.corridas} corridas)`).join(' · ')}
+          </p>
+        )}
         <p className="text-xs text-stone-500 dark:text-stone-400">
-          Avisa desde el {avisoPct || '—'}% · compacta el contexto al {compactarPct}%. Se cambia hablando con el agente. Los dólares son a precio de API, como referencia: con la suscripción no se cobran aparte.
+          Avisa desde el {avisoPct || '—'}% · compacta el contexto al {compactarPct}%. Se cambia hablando con el agente. Con la suscripción, los dólares son a precio de API, como referencia: no se cobran aparte. Los motores por uso (clave de API, OpenCode) sí se cobran, y van aparte.
         </p>
       </div>
     </Tarjeta>

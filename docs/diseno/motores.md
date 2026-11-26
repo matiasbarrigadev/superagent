@@ -1,6 +1,7 @@
 # Diseño: varios motores de agente
 
-Estado: **propuesta, para validar**. Nada de esto está implementado.
+Estado: **fases 1 y 2 implementadas en 0.5.0** (Claude con clave de API, adaptadores y OpenCode 1.19.6). Cómo se
+usa: [../MOTORES.md](../MOTORES.md). Lo de abajo es el diseño completo; las fases 3 a 5 siguen pendientes.
 
 ## Objetivo
 
@@ -15,7 +16,7 @@ cambia, la autoridad no.
 | Claude, API | `claude` con `ANTHROPIC_API_KEY` | Por uso | Sin suscripción; equipos con cuenta de API |
 | Codex | `@openai/codex` | ChatGPT Plus/Pro o `CODEX_API_KEY` | Quien ya paga ChatGPT |
 | Gemini | `@google/gemini-cli` | `GEMINI_API_KEY` (capa gratis) o Vertex | Probarlo gratis |
-| OpenCode | `@opencode/cli` (V2) | Clave de cada proveedor | DeepSeek, MiniMax, Kimi, Qwen, OpenRouter, Ollama local… |
+| OpenCode | `opencode-ai` 1.19.6 (V1, fija) | Clave de cada proveedor | DeepSeek, MiniMax, Kimi, Qwen, OpenRouter, Ollama local… |
 
 ## El modelo: un adaptador por motor
 
@@ -98,7 +99,22 @@ El agente puede pedir cada clave con `pedir_variable` (link al panel), como cual
 
 Cada fase suma unos MB a la imagen (las CLIs) y se publica como versión nueva.
 
-## Dudas para decidir
+## Decisiones tomadas (0.5.0)
+
+- Si un motor no garantiza una restricción del rol, no corre para ese rol: corre Claude.
+- OpenCode queda en la versión 1 (1.19.6), fija. La V2 no deja cargar claves sin terminal interactiva, guarda las
+  credenciales en SQLite y suma herramientas que no se pueden limitar bien (código, automatizaciones que programan
+  comandos).
+- El respaldo automático y los topes de gasto quedan para la fase 5.
+
+Lo que se aprendió con corridas reales de OpenCode 1.19.6:
+
+- El comodín `"*"` en `tools` o `permission` lo cuelga al arrancar.
+- `question`, `external_directory` y `doom_loop` esperan a una persona.
+- Cuando el proveedor corta por límite, reintenta para siempre y solo lo dice en el log (`--print-logs`).
+- El prompt por stdin no anda: va como argumento, o como archivo adjunto (`-f`) si es muy largo.
+
+## Dudas que hubo (resueltas arriba)
 
 1. ¿Arrancamos por la fase 1 + 2 (Claude API + OpenCode) como propuesta, o alguna antes?
 2. Si un motor no garantiza una restricción del rol, ¿está bien "no corre para ese rol" (seguro) o preferís que

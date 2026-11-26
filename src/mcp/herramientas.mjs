@@ -64,7 +64,7 @@ export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((r
   // Sumar o quitar un número de WhatsApp es vincular: se hace en el panel (su política, conversando).
   && !(metodo !== 'GET' && /^\/api\/whatsapp\/numeros(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, motores = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -942,6 +942,47 @@ export function crearHerramientas({ db, numeros = null, paquetes = null, despert
           return 'QR enviado a esta charla. Decile que lo abra en otra pantalla (por ejemplo, WhatsApp Web en la compu) y lo escanee desde el teléfono del número nuevo: WhatsApp → Dispositivos vinculados → Vincular un dispositivo. Si vence, pedí otro; si se complica, mejor el código (accion "codigo").';
         }
         throw new ErrorHerramienta('Acción desconocida.');
+      },
+    },
+
+    configurar_motores: {
+      descripcion: 'Solo el Propietario, en su charla: qué motor de IA corre cada tipo de conversación. Tipos: propietario (su charla), equipo (charlas internas y grupos), terceros (clientes y externos), trabajos, rutinas, y defecto. Motores: claude (su suscripción), claude-api (clave ANTHROPIC_API_KEY, por uso), opencode (DeepSeek, MiniMax, Kimi, Qwen, OpenRouter… con modelo "proveedor/modelo" y la clave de ese proveedor, por ejemplo DEEPSEEK_API_KEY). "ver" muestra cómo está y qué falta. "cambiar" (cambios: { tipo: { motor, modelo } } o { tipo: null } para volver al de por defecto) primero muestra la ficha y pide confirmación en otro mensaje (repetí con confirmado: true). Las claves faltantes pedilas con pedir_variable.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['ver', 'cambiar'] },
+          cambios: { type: 'object', description: 'Por tipo: { "motor": "opencode", "modelo": "deepseek/deepseek-chat" }, o null para volver al de por defecto.' },
+          confirmado: { type: 'boolean', description: 'true solo después de que el Propietario confirme la ficha en un mensaje nuevo.' },
+        },
+        required: ['accion'],
+      },
+      ejecutar(ctx, { accion, cambios = null, confirmado = false }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, elige los motores.');
+        if (!motores) throw new ErrorHerramienta('Esta instalación no maneja otros motores.');
+        if (accion === 'ver') return `Motores por tipo de conversación:
+${motores.ficha()}`;
+        if (accion !== 'cambiar') throw new ErrorHerramienta('Acción desconocida.');
+        let v;
+        try { v = motores.validar(cambios); } catch (e) { throw new ErrorHerramienta(e.message); }
+        if (!Object.keys(v).length) throw new ErrorHerramienta('No hay cambios.');
+        const firma = JSON.stringify(v);
+        const clave = `motores|${ctx.personaId}`;
+        const previa = fichasMostradas.get(clave);
+        if (!confirmado || !previa || previa.firma !== firma) {
+          fichasMostradas.set(clave, { corridaId: ctx.corridaId, ts: reloj(), firma });
+          return `Todavía no se cambió nada. Así quedaría:
+${motores.ficha(v)}
+
+Mostráselo al Propietario (con lo que cuesta cada uno y lo que falta cargar) y preguntale si lo confirma. Si confirma en un mensaje nuevo, repetí con los mismos cambios y confirmado: true.`;
+        }
+        if (previa.corridaId === ctx.corridaId) throw new ErrorHerramienta('El Propietario todavía no lo confirmó: esperá su respuesta.');
+        fichasMostradas.delete(clave);
+        motores.configurar(v);
+        auditar(db, 'motores.configurar', { actor: String(ctx.personaId ?? ''), detalle: v });
+        bitacora?.anotar({ personaId: ctx.personaId, chatId: ctx.chatId, donde: 'charla', resultado: 'hecho', que: `motores: ${Object.entries(v).map(([t, a]) => `${t} → ${a ? `${a.motor}${a.modelo ? ` (${a.modelo})` : ''}` : 'por defecto'}`).join(', ')}`, ref: 'configurar_motores' });
+        return `Listo, quedó así:
+${motores.ficha()}
+Las charlas que cambian de motor arrancan una conversación nueva (con la memoria de siempre).`;
       },
     },
 

@@ -1,5 +1,6 @@
 // Arma el núcleo: política, roles, memoria, salida, avisos, aprobaciones, propuestas, MCP, motor,
 // rutinas, entradas e ingesta. Lo usan el servidor y los tests (con dobles de WAHA y de Claude).
+import path from 'node:path';
 import { crearAjustes, esPanel } from './util.mjs';
 import { auditar } from './db/index.mjs';
 import { zonaValida } from './rutinas/cron.mjs';
@@ -26,7 +27,10 @@ import { crearNumeros } from './wa/numeros.mjs';
 import { crearHerramientas } from './mcp/herramientas.mjs';
 import { crearServidorMcp } from './mcp/servidor.mjs';
 import { crearArmador } from './engine/contexto.mjs';
-import { crearEjecutor } from './engine/claude.mjs';
+import { crearAdaptadorClaude } from './engine/claude.mjs';
+import { crearAdaptadorOpenCode } from './engine/opencode.mjs';
+import { crearEjecutorComun } from './engine/ejecutor.mjs';
+import { crearMotores } from './engine/motores.mjs';
 import { crearMotor } from './engine/motor.mjs';
 import { crearProgramador } from './rutinas/programador.mjs';
 import { proxima } from './rutinas/cron.mjs';
@@ -185,13 +189,20 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
   // Apps del agente publicadas en /apps/<nombre>/ (el proxy está en server.mjs).
   const apps = crearApps({ db, config, aislamiento: ais, entorno, pausada: () => db.prepare('SELECT estado FROM cuentas WHERE id = 1').get()?.estado === 'pausada', reloj, log });
   const paquetes = crearPaquetes({ db, roles, memoria, numeros, entorno, procedimientos, ajustes, reloj });
-  const herramientas = crearHerramientas({ db, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  // Motores: Claude (suscripción o clave de API) y OpenCode (otros proveedores). Cada corrida elige el suyo.
+  const adaptadores = {
+    claude: crearAdaptadorClaude({ cuenta: cuentaClaude }),
+    'claude-api': crearAdaptadorClaude({ cuenta: cuentaClaude, credencial: 'api' }),
+    opencode: crearAdaptadorOpenCode({ bin: config.opencode?.bin ?? 'opencode', clave: (n) => entorno.valor(n), dirConfigVacio: path.join(config.dataDir ?? '.', 'opencode-config') }),
+  };
+  const motores = crearMotores({ ajustes, adaptadores, cuenta: cuentaClaude });
+  const herramientas = crearHerramientas({ db, motores, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
   const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, avisos, aislamiento: ais, conectores, roles, numeros });
-  const ej = ejecutar ?? crearEjecutor({ cuenta: cuentaClaude, aislamiento: ais, log });
+  const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
   const motor = crearMotor({ db, config,
     // Una rutina que falla por algo técnico: el agente se lo cuenta a los Propietarios.
-    alFallaRutina: ({ rutina, error }) => despertarPropietarios({ origen: `rutina:${rutina.id}`, texto: `[rutina R-${rutina.id} falló] ${nombreDe(rutina.creada_por)} la había pedido ("${String(rutina.instruccion).slice(0, 200)}"). Error: ${String(error ?? '').slice(0, 300)}` }), ajustes, politica, armador, ejecutar: ej, mcp, salida, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, sesiones, waha: waRuteado, consumo, preguntar: cuentaClaude?.preguntar ? (o) => cuentaClaude.preguntar(o) : null, reloj, log });
+    alFallaRutina: ({ rutina, error }) => despertarPropietarios({ origen: `rutina:${rutina.id}`, texto: `[rutina R-${rutina.id} falló] ${nombreDe(rutina.creada_por)} la había pedido ("${String(rutina.instruccion).slice(0, 200)}"). Error: ${String(error ?? '').slice(0, 300)}` }), ajustes, politica, armador, ejecutar: ej, motores, mcp, salida, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, sesiones, waha: waRuteado, consumo, preguntar: cuentaClaude?.preguntar ? (o) => cuentaClaude.preguntar(o) : null, reloj, log });
   ref.motor = motor;
   const programador = crearProgramador({ db, politica, motor, avisos, log });
   motor.alCadaTick((ahora) => programador.tick(ahora));
@@ -265,7 +276,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

@@ -9,6 +9,7 @@ import { crearWaha } from './wa/waha.mjs';
 import { crearVigiaWhatsApp } from './wa/vigia.mjs';
 import { crearProxyApps } from './apps/proxy.mjs';
 import { crearCuentaClaude, crearPruebaClaude } from './claude/cuenta.mjs';
+import { crearEntorno } from './servicios/entorno.mjs';
 import { crearAjustes } from './util.mjs';
 import { crearNucleo } from './nucleo.mjs';
 import { crearApp, VERSION } from './app.mjs';
@@ -31,7 +32,9 @@ if (process.env.SUPERAGENT_RESET_OWNER) auth.resetPropietario(process.env.SUPERA
 const waha = crearWaha({ ...config.waha });
 // Otros números (sesiones de WAHA): el mismo WAHA, otra sesión.
 const crearClienteWa = (session) => crearWaha({ ...config.waha, session });
-const claude = crearCuentaClaude({ config, pty, ajustes: crearAjustes(db) });
+// La clave de API de Anthropic (motor "Claude con clave") se carga como variable del entorno, cifrada.
+const variablesEntorno = crearEntorno({ db, config });
+const claude = crearCuentaClaude({ config, pty, ajustes: crearAjustes(db), claveApi: () => variablesEntorno.valor('ANTHROPIC_API_KEY') });
 const nucleo = crearNucleo({
   db, config, waha, crearClienteWa, cuentaClaude: claude, version: VERSION,
   alCambiarEstado: (s, evt) => { const n = evt?.session ?? config.waha.session; console.log(`[whatsapp] estado (${n}): ${s}`); vigiaDe(n)?.aviso(s); },

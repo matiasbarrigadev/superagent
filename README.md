@@ -12,6 +12,9 @@ con él por WhatsApp.
   contexto si le hablan a él), tareas en segundo plano que terminan, rutinas y webhooks.
 - **Cuida el consumo**: ve el uso de tu plan de Claude en cada iteración, compacta el contexto y avisa a quien
   corresponda cuando queda poco.
+- **Varios motores**: tu suscripción de Claude, Claude con clave de API, u OpenCode con DeepSeek, MiniMax, Kimi,
+  Qwen u OpenRouter. Elegís uno por tipo de conversación (por ejemplo, Claude para vos y DeepSeek para atender
+  clientes), conversando con el agente. Ver [docs/MOTORES.md](docs/MOTORES.md).
 
 > 🤖 **¿Sos un agente (Claude Code u otro) y te pidieron instalar esto?** Leé [AGENTS.md](AGENTS.md) y seguí la
 > skill [`.claude/skills/instalar-superagent`](.claude/skills/instalar-superagent/SKILL.md).
@@ -20,7 +23,8 @@ con él por WhatsApp.
 
 Necesitás:
 
-- Una **suscripción de Claude** (Pro o Max) para conectar Claude Code.
+- Una **suscripción de Claude** (Pro o Max) para conectar Claude Code, o una clave de API de Anthropic
+  (`ANTHROPIC_API_KEY`, por uso).
 - Un **número de WhatsApp para el agente**, de preferencia dedicado, con el teléfono a mano para escanear el QR.
 - Tu **WhatsApp personal**, para que el agente te reconozca como Propietario.
 

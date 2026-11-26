@@ -25,7 +25,7 @@ export function usuarioSO(nombre) {
 /** Saca de un texto cualquier token de Claude (para lo que se muestra en la terminal y en los logs). */
 export const tacharToken = (t) => String(t).replace(new RegExp(RE_TOKEN.source, 'g'), '[token guardado]');
 
-export function crearCuentaClaude({ config, log = console, pty = null, ajustes = null }) {
+export function crearCuentaClaude({ config, log = console, pty = null, ajustes = null, claveApi = () => null }) {
   const usuario = usuarioSO(config.claude.usuarioSO);
   const esRoot = typeof process.getuid === 'function' && process.getuid() === 0;
   if (process.platform !== 'win32' && !(usuario && esRoot)) {
@@ -45,8 +45,12 @@ export function crearCuentaClaude({ config, log = console, pty = null, ajustes =
     ajustes.set('claude_token_guardado', String(Date.now()));
   }
 
-  /** Entorno limpio de una corrida: nada del gateway, solo lo que Claude Code necesita. */
-  function entorno({ home, configDir, tmp }) {
+  /**
+   * Entorno limpio de una corrida: nada del gateway, solo lo que Claude Code necesita. `credencial`:
+   * "suscripcion" (solo el token), "api" (solo ANTHROPIC_API_KEY, que si está le gana al token), "ninguna", o
+   * "auto" (el token si está; si no, la clave de API) para lo interno como transcribir audios.
+   */
+  function entorno({ home, configDir, tmp, credencial = 'auto' }) {
     const base = {
       PATH: process.env.PATH,
       LANG: 'C.UTF-8',
@@ -57,8 +61,12 @@ export function crearCuentaClaude({ config, log = console, pty = null, ajustes =
       DISABLE_TELEMETRY: '1',
     };
     if (tmp) base.TMPDIR = tmp;
-    const token = tokenActual();
+    const token = credencial === 'suscripcion' || credencial === 'auto' ? tokenActual() : null;
     if (token) base.CLAUDE_CODE_OAUTH_TOKEN = token;
+    else if (credencial === 'api' || credencial === 'auto') {
+      const k = claveApi();
+      if (k) base.ANTHROPIC_API_KEY = k;
+    }
     if (process.platform === 'win32') {
       return { ...base, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA, TEMP: tmp ?? process.env.TEMP };
     }
@@ -142,11 +150,12 @@ export function crearCuentaClaude({ config, log = console, pty = null, ajustes =
    */
   async function preguntar({ sistema, texto, maxTokens = 5, modelo = 'claude-haiku-4-5', fetch: f = globalThis.fetch }) {
     const token = tokenActual();
-    if (!token) return null;
+    const clave = token ? null : claveApi();
+    if (!token && !clave) return null;
     try {
       const r = await f('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        headers: { ...(token ? { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' } : { 'x-api-key': clave }), 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         body: JSON.stringify({
           model: modelo, max_tokens: maxTokens,
           system: [{ type: 'text', text: 'You are Claude Code, Anthropic\'s official CLI for Claude.' }, { type: 'text', text: sistema }],
@@ -162,6 +171,7 @@ export function crearCuentaClaude({ config, log = console, pty = null, ajustes =
 
   return {
     tokenActual,
+    tieneClaveApi: () => !!claveApi(),
     entorno,
     comando,
     usoPlan,
@@ -213,7 +223,7 @@ export function crearCuentaClaude({ config, log = console, pty = null, ajustes =
         // Ancha, para que el token no se corte en dos líneas.
         name: 'xterm-256color', cols: Math.max(cols, 220), rows,
         cwd: dirLogin,
-        env: entorno({ home: dirLogin, configDir: dirLogin, tmp: null }),
+        env: entorno({ home: dirLogin, configDir: dirLogin, tmp: null, credencial: 'ninguna' }),
         ...comoAgente,
       });
       terminal = p;
@@ -383,7 +393,7 @@ export function crearPruebaClaude({ cuenta, aislamiento, lanzar = spawn }) {
     const c = cuenta.comando(['-p', 'Respondé solamente con la palabra: hola', '--output-format', 'text', '--tools', '', '--setting-sources', '', '--model', 'haiku']);
     return new Promise((resolve) => {
       const hijo = lanzar(c.file, c.args, {
-        env: { ...cuenta.entorno({ home: lugar.base, configDir: lugar.config, tmp: lugar.tmp }), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) }, cwd: lugar.trabajo,
+        env: { ...cuenta.entorno({ home: lugar.base, configDir: lugar.config, tmp: lugar.tmp, credencial: 'suscripcion' }), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) }, cwd: lugar.trabajo,
         ...(aislamiento.activo ? { uid: lugar.usuario.uid, gid: lugar.usuario.gid } : {}), windowsHide: true, timeout: 120_000,
       });
       let out = '', err = '';

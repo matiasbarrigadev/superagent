@@ -85,5 +85,10 @@ export function crearEntorno({ db, config, reloj = () => Date.now() }) {
 
   const link = (id) => `${config.publicUrl ?? ''}/#entorno?pedido=${encodeURIComponent(id)}`;
 
-  return { guardar, listar, variables, borrar, nombres, pedir, pedido, cerrarPedido, link };
+  /** El valor de una variable (para las credenciales de los motores), o null. */
+  function valor(nombre) {
+    try { return leerUna(validarNombre(nombre))?.valor ?? null; } catch { return null; }
+  }
+
+  return { guardar, listar, variables, valor, borrar, nombres, pedir, pedido, cerrarPedido, link };
 }

@@ -58,5 +58,8 @@ export function cargarConfig(env = process.env) {
       bin: env.CLAUDE_BIN ?? 'claude',
       usuarioSO: env.SUPERAGENT_AGENT_USER ?? 'agente',
     },
+    opencode: {
+      bin: env.OPENCODE_BIN ?? 'opencode',
+    },
   };
 }

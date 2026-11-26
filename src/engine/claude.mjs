@@ -1,8 +1,8 @@
-// Corre `claude -p` (binario oficial, sin modificar) con el usuario de Linux de su conversación, entorno limpio
-// y su propia carpeta, y lee el stream-json. El prompt va por stdin; los permisos van como flags que arma el gateway.
+// Adaptador de Claude Code: `claude -p` (binario oficial, sin modificar) con el usuario de Linux de su
+// conversación, entorno limpio y su propia carpeta, leyendo el stream-json. El prompt va por stdin; los permisos van como flags que arma el gateway.
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn as spawnNode } from 'node:child_process';
+import { crearEjecutorComun } from './ejecutor.mjs';
 
 /** Flags de una corrida a partir de su especificación (ver engine/contexto.mjs). */
 export function argumentos(spec, { sesion, nueva }) {
@@ -59,89 +59,71 @@ export function clasificarError(texto = '', codigoError = null) {
   return 'otro';
 }
 
+// Variables que no pueden llegar a una corrida de Claude desde el entorno del Propietario: una clave de API en el
+// entorno le gana al token de la suscripción. La credencial la pone cada adaptador.
+const CREDENCIALES_CLAUDE = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'];
+
 /**
- * Ejecutor real. `cuenta`: entorno limpio y comando (claude/cuenta.mjs). `aislamiento`: usuario y carpeta
- * de la conversación (claude/aislamiento.mjs). `lanzar` permite reemplazar spawn en los tests.
+ * Adaptador de Claude Code. `credencial`: "suscripcion" (token de `claude setup-token`) o "api"
+ * (ANTHROPIC_API_KEY, cobro por uso en dólares reales). Misma CLI y mismas sesiones en disco.
  */
-export function crearEjecutor({ cuenta, aislamiento, lanzar = spawnNode, log = console }) {
-  return async function ejecutar(spec, { sesion, nueva, timeoutMs = 15 * 60_000 } = {}) {
-    const lugar = aislamiento.preparar(spec.claveAislamiento);
-    // Preparación propia de la corrida (por ejemplo, el clon del repo de un trabajo), con la carpeta ya lista.
-    if (spec.preparar) {
-      try { await spec.preparar(lugar); } catch (e) {
-        aislamiento.terminar(lugar);
-        return { ok: false, tipoError: 'otro', error: `No se pudo preparar la corrida: ${e.message}`, herramientas: [], lugar };
-      }
-    }
-    // Adjuntos de esta tanda: se copian adentro, así solo los ve esta conversación.
-    for (const a of spec.adjuntos ?? []) {
-      try { aislamiento.copiarAdentro(a.origen, path.join(lugar.adjuntos, a.nombre), lugar.usuario); } catch (e) { log.warn('[corrida] adjunto', a.nombre, e.message); }
-    }
-    for (const f of spec.archivosExtra ?? []) aislamiento.escribirArchivo(path.join(lugar.base, f.nombre), f.contenido, lugar.usuario);
-    // Un archivo por corrida: el entorno del Propietario puede tener dos corridas a la vez.
-    const archivoMcp = path.join(lugar.base, spec.completo ? `mcp-${crypto.randomUUID()}.json` : 'mcp.json');
-    aislamiento.escribirArchivo(archivoMcp, configMcp(spec), lugar.usuario);
-    const c = cuenta.comando(argumentos({ ...spec, mcp: { ...spec.mcp, archivo: archivoMcp } }, { sesion, nueva }));
-    const comoUsuario = aislamiento.activo ? { uid: lugar.usuario.uid, gid: lugar.usuario.gid } : {};
-    return new Promise((resolve) => {
-      const fin = (r) => { aislamiento.terminar(lugar, { archivoMcp }); resolve({ ...r, lugar }); };
-      let hijo;
-      try {
-        hijo = lanzar(c.file, c.args, { env: { ...(spec.entornoExtra ?? {}), ...(spec.compactarPct ? { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: String(spec.compactarPct) } : {}), ...cuenta.entorno({ home: lugar.base, configDir: lugar.config, tmp: lugar.tmp }) }, cwd: lugar.trabajo, ...comoUsuario, windowsHide: true });
-      } catch (e) {
-        fin({ ok: false, tipoError: 'sin_binario', error: e.message, herramientas: [] });
-        return;
-      }
-      const r = { ok: false, sessionId: null, resultado: '', error: null, tipoError: null, herramientas: [], codigoError: null };
-      let buf = '', err = '', vencida = false;
-      const alLinea = (linea) => {
-        if (!linea.trim()) return;
-        let m;
-        try { m = JSON.parse(linea); } catch { return; }
-        if (m.type === 'system' && m.subtype === 'init') r.sessionId = m.session_id ?? r.sessionId;
-        if (m.type === 'assistant') {
-          if (m.error) r.codigoError = m.error;
-          // Tamaño del contexto: lo que entró en el último pedido al modelo (con lo cacheado).
-          const u = m.message?.usage;
-          if (u) r.contexto = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-          for (const b of m.message?.content ?? []) if (b.type === 'tool_use') r.herramientas.push(b.name);
-        }
-        if (m.type === 'result') {
-          r.sessionId = m.session_id ?? r.sessionId;
-          r.resultado = String(m.result ?? '');
-          const u = m.usage ?? {};
-          r.uso = {
-            entrada: (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), cache: u.cache_read_input_tokens ?? 0,
-            salida: u.output_tokens ?? 0, costo: Number(m.total_cost_usd ?? 0), turnos: m.num_turns ?? null, contexto: r.contexto ?? null,
-          };
-          r.ok = !m.is_error;
-          if (m.is_error) r.error = r.resultado || m.subtype;
-        }
+export function crearAdaptadorClaude({ cuenta, credencial = 'suscripcion' }) {
+  const id = credencial === 'api' ? 'claude-api' : 'claude';
+  return {
+    id,
+    nombre: credencial === 'api' ? 'Claude (clave de API)' : 'Claude (suscripción)',
+    familia: 'claude',
+    // Claude Code saca de verdad cualquier herramienta propia con --tools.
+    puedeNegar: new Set(['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebSearch', 'WebFetch', 'Task']),
+    clasificarError,
+    preparar({ spec, lugar, aislamiento, sesion, nueva }) {
+      // Un archivo por corrida: el entorno del Propietario puede tener dos corridas a la vez.
+      const archivoMcp = path.join(lugar.base, spec.completo ? `mcp-${crypto.randomUUID()}.json` : 'mcp.json');
+      aislamiento.escribirArchivo(archivoMcp, configMcp(spec), lugar.usuario);
+      const c = cuenta.comando(argumentos({ ...spec, mcp: { ...spec.mcp, archivo: archivoMcp } }, { sesion, nueva }));
+      const extra = { ...(spec.entornoExtra ?? {}) };
+      for (const n of CREDENCIALES_CLAUDE) delete extra[n];
+      const env = {
+        ...extra,
+        ...(spec.compactarPct ? { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: String(spec.compactarPct) } : {}),
+        ...cuenta.entorno({ home: lugar.base, configDir: lugar.config, tmp: lugar.tmp, credencial }),
       };
-      const reloj = setTimeout(() => { vencida = true; try { hijo.kill('SIGKILL'); } catch {} }, timeoutMs);
-      hijo.stdout.on('data', (d) => {
-        buf += d;
-        let i;
-        while ((i = buf.indexOf('\n')) >= 0) { alLinea(buf.slice(0, i)); buf = buf.slice(i + 1); }
-      });
-      hijo.stderr.on('data', (d) => { if (err.length < 20_000) err += d; });
-      hijo.on('error', (e) => {
-        clearTimeout(reloj);
-        fin({ ...r, ok: false, tipoError: e.code === 'ENOENT' ? 'sin_binario' : 'otro', error: e.message });
-      });
-      hijo.on('close', (codigo) => {
-        clearTimeout(reloj);
-        if (buf) alLinea(buf);
-        if (vencida) { fin({ ...r, ok: false, tipoError: 'tiempo', error: 'La corrida tardó demasiado y se cortó.' }); return; }
-        if (codigo !== 0 && r.ok) r.ok = false;
-        if (!r.ok) {
-          r.error = r.error || err.trim().slice(0, 2000) || `claude terminó con código ${codigo}`;
-          r.tipoError = clasificarError(`${r.error}\n${err}`, r.codigoError);
-        }
-        fin(r);
-      });
-      hijo.stdin.on('error', () => {});
-      hijo.stdin.end(spec.prompt);
-    });
+      return { file: c.file, args: c.args, env, stdin: spec.prompt, archivoMcp };
+    },
+    lector() {
+      return {
+        linea(linea, r) {
+          let m;
+          try { m = JSON.parse(linea); } catch { return; }
+          if (m.type === 'system' && m.subtype === 'init') r.sessionId = m.session_id ?? r.sessionId;
+          if (m.type === 'assistant') {
+            if (m.error) r.codigoError = m.error;
+            // Tamaño del contexto: lo que entró en el último pedido al modelo (con lo cacheado).
+            const u = m.message?.usage;
+            if (u) r.contexto = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+            for (const b of m.message?.content ?? []) if (b.type === 'tool_use') r.herramientas.push(b.name);
+          }
+          if (m.type === 'result') {
+            r.sessionId = m.session_id ?? r.sessionId;
+            r.resultado = String(m.result ?? '');
+            const u = m.usage ?? {};
+            r.uso = {
+              entrada: (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), cache: u.cache_read_input_tokens ?? 0,
+              salida: u.output_tokens ?? 0, costo: Number(m.total_cost_usd ?? 0), turnos: m.num_turns ?? null, contexto: r.contexto ?? null,
+            };
+            r.ok = !m.is_error;
+            if (m.is_error) r.error = r.resultado || m.subtype;
+          }
+        },
+      };
+    },
   };
+}
+
+/**
+ * Ejecutor de Claude solo (compatibilidad): `cuenta` da el entorno limpio y el comando (claude/cuenta.mjs),
+ * `aislamiento` el usuario y la carpeta de la conversación. `lanzar` permite reemplazar spawn en los tests.
+ */
+export function crearEjecutor({ cuenta, aislamiento, lanzar, log = console }) {
+  return crearEjecutorComun({ adaptadores: { claude: crearAdaptadorClaude({ cuenta }), 'claude-api': crearAdaptadorClaude({ cuenta, credencial: 'api' }) }, aislamiento, lanzar, log });
 }

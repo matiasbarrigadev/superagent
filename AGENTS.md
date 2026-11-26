@@ -73,7 +73,8 @@ src/
   config.mjs, secretos.mjs          configuración (ninguna variable es obligatoria) y secretos generados
   wa/                               WhatsApp: webhook de WAHA, salida, grupos, unificación @lid/@c.us
   engine/                           motor (cola, debounce, despertar), contexto (instrucciones y herramientas
-                                    por rol) y claude.mjs (lanza `claude -p` stream-json)
+                                    por rol), ejecutor común y un adaptador por motor (claude.mjs, opencode.mjs);
+                                    motores.mjs elige el motor de cada corrida
   claude/                           aislamiento por usuario de Linux, cuenta de Claude (token, uso del plan),
                                     logins de CLIs del entorno del Propietario
   mcp/                              MCP del gateway (127.0.0.1) y sus herramientas
@@ -91,4 +92,5 @@ railway/TEMPLATE.md                 receta del template de Railway
 docker-compose.yml                  instalación con la imagen publicada (docker-compose.desarrollo.yml: construir desde el repo)
 docs/IMPORTAR.md                    formato de paquetes para traer trabajo previo o mudar una instalación
 docs/NUMEROS.md                     varios números de WhatsApp y la política de cada uno
+docs/MOTORES.md                     motores de IA (Claude con suscripción o clave, OpenCode) y cómo se elige cada uno
 ```

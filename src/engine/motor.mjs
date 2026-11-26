@@ -14,7 +14,7 @@ const ES_DESPERTAR_PROPIO = /^(rutina|entrada):/;
 
 export function crearMotor({
   db, config = {}, ajustes, politica, armador, ejecutar, mcp, salida, avisos, aprobaciones, propuestas,
-  archivos = null, aislamiento = null, conectores = null, repos = null, sesiones = null, waha = null, consumo = null, preguntar = null, alFallaRutina = null, reloj = () => Date.now(), log = console,
+  archivos = null, aislamiento = null, conectores = null, repos = null, sesiones = null, waha = null, consumo = null, motores = null, preguntar = null, alFallaRutina = null, reloj = () => Date.now(), log = console,
 }) {
   const pendientes = new Map(); // chatId → { primero, listoEn }
   const corriendo = new Set();
@@ -212,11 +212,29 @@ export function crearMotor({
     log.warn(`[motor] Claude no responde (${motivo}); se reintenta en ${Math.round(espera / 60_000)} min`);
   }
 
+  function avisarMotor(motor, motivo, error) {
+    const clave = `aviso_motor:${motor}:${motivo}`;
+    const previo = Number(ajustes.get(clave)) || 0;
+    if (reloj() - previo < 6 * 3_600_000) return;
+    ajustes.set(clave, String(reloj()));
+    const que = motivo === 'limite' ? 'se quedó sin crédito o llegó a su límite' : motivo === 'sin_binario' ? 'no está instalado en el servidor' : 'no tiene la clave o la clave no funciona';
+    avisos.alPropietario(`Aviso de Superagent: el motor ${motor} ${que}. Las charlas que corren con él quedan en espera y se reintentan cada 15 minutos (podés pedirme que use otro motor). Detalle: ${String(error ?? '').slice(0, 300)}`, { tipo: 'error' });
+    log.warn(`[motor] ${motor} no responde (${motivo})`);
+  }
+
   /** Una corrida completa: armado, MCP con token propio, ejecución y estado de los mensajes. */
   async function correr({ tipo, chatId, personaId, mensajes = [], trabajo = null, rutina = null, origen = null, buzon = [], chatOrigen = null }) {
     const seqs = mensajes.map((m) => m.seq);
     marcar(seqs, 2);
     const spec = armador.armar({ tipo, chatId, personaId, mensajes, trabajo, rutina, origen, buzon });
+    // Motor de esta corrida (lo elige el Propietario por tipo). Las sesiones no se cruzan entre motores.
+    if (motores) {
+      const e = motores.elegir(spec);
+      spec.motor = e.motor;
+      if (e.modelo) spec.modelo = e.modelo;
+      if (e.familia !== 'claude') spec.clave = `${e.familia}:${spec.clave}`;
+      if (e.nota) log.info?.(`[motor] ${e.nota}`);
+    }
     const chat = chatId ? db.prepare('SELECT proyecto_id FROM chats WHERE id = ?').get(chatId) : null;
     // Si sigue una charla y sus herramientas cambiaron desde la última corrida (cambió el rol o sus conectores),
     // se le dice: así no se queda con lo que creía tener o no tener.
@@ -234,8 +252,8 @@ export function crearMotor({
       }
     }
     const corridaId = Number(db.prepare(`INSERT INTO corridas (tipo, chat_id, persona_id, persona_origen, rol, credencial_usada, modelo, esfuerzo,
-        trabajo_id, estado, inicio, canal, origen, cliente_id, herramientas) VALUES (?, ?, ?, ?, ?, 'propietario', ?, ?, ?, 'corriendo', ?, ?, ?, ?, ?)`)
-      .run(tipo, chatId ?? null, personaId ?? null, trabajo?.pedido_por ?? personaId ?? null, spec.rol.nombre, spec.modelo, spec.esfuerzo,
+        trabajo_id, estado, inicio, canal, origen, cliente_id, herramientas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'corriendo', ?, ?, ?, ?, ?)`)
+      .run(tipo, chatId ?? null, personaId ?? null, trabajo?.pedido_por ?? personaId ?? null, spec.rol.nombre, spec.motor ?? 'claude', spec.modelo, spec.esfuerzo,
         trabajo?.id ?? null, reloj(), spec.canal, origen, spec.clienteId, JSON.stringify({ claude: spec.herramientasClaude, gateway: spec.herramientasGateway }))
       .lastInsertRowid);
     for (const s of seqs) db.prepare('UPDATE mensajes SET corrida_id = ? WHERE seq = ?').run(corridaId, s);
@@ -305,6 +323,11 @@ export function crearMotor({
         avisos.alPropietario('Claude volvió a responder: se están procesando los mensajes en cola.', { tipo: 'aviso', whatsapp: false });
       }
       bloqueo = null;
+    } else if (['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError) && spec.motor && spec.motor !== 'claude') {
+      // Otro motor sin crédito o sin clave: no frena a Claude. Esa charla espera y el Propietario se entera una vez.
+      marcar(seqs, 0);
+      avisarMotor(spec.motor, r.tipoError, r.error);
+      if (chatId && seqs.length) programar(chatId, reloj(), 15 * 60_000);
     } else if (['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError)) {
       marcar(seqs, 0);
       bloquear(r.tipoError);
