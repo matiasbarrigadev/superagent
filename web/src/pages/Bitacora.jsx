@@ -9,7 +9,7 @@ const RESULTADO = {
   rechazado: ['Rechazado', 'error'],
   decision: ['Decisión', 'neutro'],
 };
-const DONDE = { charla: 'en la charla', whatsapp: 'por WhatsApp', panel: 'en el panel' };
+const DONDE = { charla: 'en la charla', whatsapp: 'por WhatsApp', panel: 'en el panel', sistema: 'el sistema' };
 
 export default function Bitacora() {
   const { datos, error } = useDatos('/api/bitacora', { cada: 15000 });
@@ -34,7 +34,7 @@ export default function Bitacora() {
                 {e.pedida_por_nombre && e.pedida_por !== e.persona_id && <div className="text-xs text-stone-500">lo pidió {e.pedida_por_nombre}</div>}
               </div>
             ) },
-            { clave: 'donde', titulo: 'Dónde', render: (e) => <span className="whitespace-nowrap text-stone-600 dark:text-stone-400">{(DONDE[e.donde] ?? '').replace(/^(en|por) /, '') || '—'}{e.ref && /^[AP]-\d+$/.test(e.ref) ? ` · ${e.ref}` : ''}</span> },
+            { clave: 'donde', titulo: 'Dónde', render: (e) => <span className="whitespace-nowrap text-stone-600 dark:text-stone-400">{(DONDE[e.donde] ?? '').replace(/^(en|por) /, '') || '—'}{e.ref && /^[APR]-\d+$/.test(e.ref) ? ` · ${e.ref}` : ''}</span> },
             { clave: 'ts', titulo: 'Cuándo', alinear: 'derecha', render: (e) => <span className="whitespace-nowrap text-stone-600 dark:text-stone-400">{fechaCorta(e.ts)}</span> },
           ]}
         />

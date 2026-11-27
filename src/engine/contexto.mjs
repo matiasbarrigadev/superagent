@@ -13,7 +13,7 @@ const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 // Lo que el agente tiene que saber de su entorno para levantar y compartir apps (modo completo).
 const APPS = (url) => `Tu entorno y tus apps: vivís en un servidor propio (un contenedor Linux siempre encendido, hoy en Railway) con Node, Python, git y tu disco persistente (tu HOME queda entre reinicios; lo que esté fuera de tu HOME no). Es tu "localhost" con URL pública: lo que levantes en un puerto local lo publicás con la herramienta apps y queda en ${url || '<url pública>'}/apps/<nombre>/, en vivo (si cambiás el código con el servidor de desarrollo corriendo, el cambio se ve al instante). Podés crear lo que te pidan, libremente: un sistema completo (un CRM con su base, un panel a medida), una herramienta chica (calculadora, simulador, formulario, informe interactivo) o lo que sea; cada cosa con su nombre y su link para compartir con quien corresponda. Configurá la app para servir bajo /apps/<nombre> (te llega como BASE_PATH) y escuchar en localhost en el puerto que elijas (te llega como PORT si le das el comando a apps, que además la vuelve a levantar sola). Datos: SQLite o archivos dentro de tu HOME, o un servicio externo si hace falta. La URL es pública: si piden contraseña, login o acceso por persona, construilo en la app. Escala: el servidor es compartido (CPU y memoria) y es ideal para apps de negocio de uso interno o de clientes (decenas o cientos de usuarios), no para algo masivo. Si te piden algo que tiene que escalar mucho o recibir mucho tráfico público, explicalo con honestidad y proponé opciones: subir el plan del servidor o desplegarlo aparte (Vercel, Supabase, otro proyecto de Railway) con lo que tengas conectado. Cuidá los recursos: bajá (apps quitar y matá el proceso) lo que ya no se use.`;
 
-export function crearArmador({ db, config, politica, ajustes, memoria, entorno = null, consumo = null, disco = null, avisos, aislamiento, conectores = null, roles = null, numeros = null, dirInstrucciones = DIR_AGENTE }) {
+export function crearArmador({ db, config, politica, ajustes, memoria, entorno = null, consumo = null, disco = null, rutinas = null, avisos, aislamiento, conectores = null, roles = null, numeros = null, dirInstrucciones = DIR_AGENTE }) {
   const cacheInstr = new Map();
   function instruccion(variante) {
     if (!cacheInstr.has(variante)) {
@@ -71,7 +71,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
       if (puede('iniciar_conversacion')) gateway.push('iniciar_conversacion');
       if (puede('publicar')) gateway.push('publicar');
       if (variante === 'onboarding') gateway.push('terminar_onboarding');
-      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'vincular_numero', 'configurar_sesion', 'configurar_motores', 'disco', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
+      if (esPropietario && variante !== 'tercero') gateway.push('pedir_variable', 'chats', 'whatsapp', 'apps', 'panel', 'numeros', 'vincular_numero', 'configurar_sesion', 'configurar_motores', 'disco', 'rutinas', 'importar_paquete', 'exportar_paquete', 'invitar_panel', 'decidir', 'anotar_decision');
       if (decidir('ver_consumo').decision === 'permitir') gateway.push('consumo');
       gateway.push('reiniciar_contexto');
       if (puede('agregar_conector') || puede('conectar_mis_cuentas')) gateway.push('agregar_conector');
@@ -257,6 +257,15 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
       if (aps.length) ctx.push(`Aprobaciones pendientes:\n${aps.map((a) => `- ${a.id}: ${a.detalle}`).join('\n')}`);
       const props = db.prepare("SELECT id, tipo, datos FROM propuestas WHERE estado = 'pendiente' ORDER BY id DESC LIMIT 10").all();
       if (props.length) ctx.push(`Propuestas sin confirmar:\n${props.map((p) => `- P-${p.id} (${p.tipo}): ${json(p.datos, {}).nombre ?? ''}`).join('\n')}`);
+      // Las rutinas y lo que cambiaron los otros Propietarios: cada charla es una sesión aparte y no ve lo que pasó
+      // en la otra; esto evita pisarse (o creer que un cambio del otro fue una falla).
+      const lasRutinas = rutinas?.listar() ?? [];
+      if (lasRutinas.length) ctx.push(`Rutinas (se cambian con la herramienta rutinas):\n${lasRutinas.slice(0, 20).map((r) => `- ${rutinas.describir(r)}`).join('\n')}`);
+      if (personaId) {
+        const otros = db.prepare(`SELECT b.ts, b.que, b.donde, p.nombre FROM bitacora b JOIN personas p ON p.id = b.persona_id JOIN roles r ON r.id = p.rol_id
+          WHERE b.persona_id <> ? AND r.nombre = 'Propietario' AND r.predefinido = 1 AND b.ts > ? ORDER BY b.id DESC LIMIT 10`).all(personaId, Date.now() - 86_400_000);
+        if (otros.length) ctx.push(`Lo que hicieron otros Propietarios en las últimas 24 h (en su charla o en el panel; no lo vuelvas a cambiar sin hablarlo):\n${otros.map((o) => `- ${hora(o.ts)} ${o.nombre} (${o.donde}): ${o.que}`).join('\n')}`);
+      }
       const gente = db.prepare('SELECT p.nombre, p.telefono, r.nombre AS rol FROM personas p JOIN roles r ON r.id = p.rol_id WHERE p.alta_manual = 1 AND p.activa = 1 ORDER BY p.id LIMIT 30').all();
       if (gente.length) ctx.push(`Personas dadas de alta:\n${gente.map((g) => `- ${g.nombre ?? 'sin nombre'}${g.telefono ? ` (+${g.telefono})` : ''}: ${g.rol}`).join('\n')}`);
     }

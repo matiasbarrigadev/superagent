@@ -2,6 +2,7 @@
 // lista las herramientas de cada conector y, en cada corrida, le ofrece al agente solo las que su rol permite.
 // Cada llamada pasa por el gateway, que agrega el token: el agente no lo ve ni en su entorno ni en su disco.
 import crypto from 'node:crypto';
+import { soloLectura } from './lectura.mjs';
 import { cifrar, descifrar } from '../auth/cripto.mjs';
 import { crearClienteMcp, ErrorConector } from './cliente.mjs';
 import { descubrir, registrar, pkce, urlAutorizacion, canjearCodigo, renovar } from './oauth.mjs';
@@ -134,13 +135,15 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, fetch: 
       const hab = json(c.habilitada_para, { roles: [], apagadas: [] });
       const mio = c.alcance === 'persona' && c.persona_id === personaId;
       if (c.alcance === 'persona' ? !mio : !(hab.roles ?? []).includes(rol.nombre)) continue;
+      const sl = soloLectura(c);
       for (const h of json(c.permisos, [])) {
         if ((hab.apagadas ?? []).includes(h.nombre)) continue;
-        if (h.escribe && nivel !== 'lectura_escritura') continue;
+        const escribe = h.escribe && !sl;
+        if (escribe && nivel !== 'lectura_escritura') continue;
         out.push({
           nombre: `${slug(c.app)}__${h.nombre}`.slice(0, 64),
-          descripcion: `[${c.app}${h.escribe ? ', escribe' : ''}] ${h.descripcion}`,
-          esquema: h.esquema, conexionId: c.id, herramienta: h.nombre, escribe: h.escribe,
+          descripcion: `[${c.app}${escribe ? ', escribe' : ''}] ${h.descripcion}`,
+          esquema: h.esquema, conexionId: c.id, herramienta: h.nombre, escribe,
         });
       }
     }
@@ -195,14 +198,15 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, fetch: 
   function listar({ resueltos = [] } = {}) {
     limpiar({ resueltos });
     return db.prepare('SELECT id, app, alcance, persona_id, estado, url_mcp, habilitada_para, permisos, conectada_por FROM conexiones ORDER BY id').all()
-      .map((c) => ({ ...c, habilitada_para: json(c.habilitada_para, {}), herramientas: json(c.permisos, []) }));
+      .map((c) => ({ ...c, habilitada_para: json(c.habilitada_para, {}), herramientas: json(c.permisos, []), solo_lectura: soloLectura(c) }));
   }
 
-  function configurar(id, { roles, apagadas, nombre }) {
+  function configurar(id, { roles, apagadas, nombre, solo_lectura }) {
     const c = obtener(id);
     const hab = json(c.habilitada_para, {});
     if (Array.isArray(roles)) hab.roles = roles.map(String);
     if (Array.isArray(apagadas)) hab.apagadas = apagadas.map(String);
+    if (typeof solo_lectura === 'boolean') hab.solo_lectura = solo_lectura;
     db.prepare('UPDATE conexiones SET habilitada_para = ?, app = ? WHERE id = ?').run(JSON.stringify(hab), nombre ? String(nombre).slice(0, 40) : c.app, c.id);
   }
 

@@ -24,7 +24,8 @@ import { crearVerificacion } from './servicios/verificacion.mjs';
 import { crearSalida } from './wa/salida.mjs';
 import { crearIngesta } from './wa/webhook.mjs';
 import { crearNumeros } from './wa/numeros.mjs';
-import { crearHerramientas } from './mcp/herramientas.mjs';
+import { crearHerramientas, chatDeDestino } from './mcp/herramientas.mjs';
+import { crearRutinas } from './rutinas/servicio.mjs';
 import { crearServidorMcp } from './mcp/servidor.mjs';
 import { crearArmador } from './engine/contexto.mjs';
 import { crearAdaptadorClaude } from './engine/claude.mjs';
@@ -61,6 +62,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
   const memoria = crearMemoria(db);
   const entorno = crearEntorno({ db, config, reloj });
   const bitacora = crearBitacora({ db, reloj });
+  const rutinas = crearRutinas({ db, bitacora, chatDeDestino, reloj });
   const archivos = crearArchivos({ db, config, reloj });
   // Números de WhatsApp (sesiones de WAHA) con su política; el principal es `waha`.
   const numeros = crearNumeros({ db, principal: waha, nombrePrincipal: config.waha?.session ?? 'default', crearCliente: crearClienteWa, bitacora, reloj, log });
@@ -206,15 +208,15 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
     gasto: (motor, desde) => db.prepare('SELECT COALESCE(SUM(costo_usd), 0) AS g FROM corridas WHERE credencial_usada = ? AND inicio >= ?').get(motor, desde).g });
   // Disco: limpieza automática, aviso al llenarse y lo que ve el agente para cuidar su espacio.
   const disco = config.dataDir ? crearDisco({ db, config, ajustes, aislamiento: ais, avisos, despertarPropietarios, reloj, log }) : null;
-  const herramientas = crearHerramientas({ db, disco, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  const herramientas = crearHerramientas({ db, disco, rutinas, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
-  const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, avisos, aislamiento: ais, conectores, roles, numeros });
+  const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, rutinas, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
   const motor = crearMotor({ db, config,
     // Una rutina que falla por algo técnico: el agente se lo cuenta a los Propietarios.
     alFallaRutina: ({ rutina, error }) => despertarPropietarios({ origen: `rutina:${rutina.id}`, texto: `[rutina R-${rutina.id} falló] ${nombreDe(rutina.creada_por)} la había pedido ("${String(rutina.instruccion).slice(0, 200)}"). Error: ${String(error ?? '').slice(0, 300)}` }), ajustes, politica, armador, ejecutar: ej, motores, mcp, salida, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, sesiones, waha: waRuteado, consumo, preguntar: cuentaClaude?.preguntar ? (o) => cuentaClaude.preguntar(o) : null, reloj, log });
   ref.motor = motor;
-  const programador = crearProgramador({ db, politica, motor, avisos, log });
+  const programador = crearProgramador({ db, politica, motor, avisos, bitacora, log });
   motor.alCadaTick((ahora) => programador.tick(ahora));
   const entradas = crearEntradas({ db, motor, chatDePersona });
   const verificacion = crearVerificacion({ db, waha, reloj });
@@ -286,7 +288,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

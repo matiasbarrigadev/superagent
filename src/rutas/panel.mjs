@@ -340,10 +340,7 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     trabajos: db.prepare(`SELECT t.id, t.estado, t.descripcion, t.resultado, t.creado, t.inicio, t.fin, t.modelo, p.nombre AS pedido_por
       FROM trabajos t LEFT JOIN personas p ON p.id = t.pedido_por ORDER BY t.numero DESC LIMIT 50`).all(),
   }));
-  app.get('/api/rutinas', (c) => c.json({
-    rutinas: db.prepare(`SELECT r.*, p.nombre AS creador FROM rutinas r LEFT JOIN personas p ON p.id = r.creada_por ORDER BY r.id DESC`).all()
-      .map((r) => ({ ...r, destinos: json(r.destinos, []), activa: !!r.activa, aprobada: !!r.aprobada })),
-  }));
+  app.get('/api/rutinas', (c) => c.json({ rutinas: nucleo.rutinas.listar().reverse() }));
   // Alta directa (la hace el Propietario: queda aprobada). Destino: teléfono, JID o "propietario" (su chat).
   app.post('/api/rutinas', async (c) => {
     if (!esDueno(c)) return c.json({ error: 'Solo el Propietario.' }, 403);
@@ -364,17 +361,19 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     auditar(db, 'rutina.crear', { actor: c.get('sesion').email, detalle: { id: Number(r.lastInsertRowid) } });
     return c.json({ id: Number(r.lastInsertRowid), proxima: prox });
   });
+  // Cambiar una rutina: instrucción, horario, destino, pausa, o que corra con los permisos de quien la cambia.
   app.patch('/api/rutinas/:id', async (c) => {
     const b = await cuerpo(c);
-    const r = db.prepare('SELECT * FROM rutinas WHERE id = ?').get(Number(id(c)));
-    if (!r) return c.json({ error: 'No existe.' }, 404);
-    if (b.activa !== undefined) {
-      if (b.activa && !r.aprobada) return c.json({ error: 'Primero hay que aprobarla.' }, 409);
-      db.prepare('UPDATE rutinas SET activa = ?, pausa_motivo = ? WHERE id = ?').run(b.activa ? 1 : 0, b.activa ? null : 'Pausada desde el panel.', r.id);
-    }
-    return c.json({ ok: true });
+    if (!nucleo.rutinas.obtener(id(c))) return c.json({ error: 'No existe.' }, 404);
+    if (b.corre_como !== undefined && !esDueno(c)) return c.json({ error: 'Solo un Propietario decide con qué permisos corre.' }, 403);
+    const cambios = {};
+    for (const k of ['instruccion', 'cuando', 'zona_horaria', 'destino', 'destinos', 'activa', 'corre_como']) if (b[k] !== undefined) cambios[k] = b[k];
+    try {
+      const { que } = nucleo.rutinas.cambiar(id(c), cambios, { actorId: c.get('sesion').persona_id, donde: 'panel' });
+      return c.json({ ok: true, cambios: que });
+    } catch (e) { return c.json({ error: e.message }, e.message.startsWith('Primero') ? 409 : 400); }
   });
-  app.delete('/api/rutinas/:id', (c) => c.json({ ok: !!db.prepare('DELETE FROM rutinas WHERE id = ?').run(Number(id(c))).changes }));
+  app.delete('/api/rutinas/:id', (c) => c.json({ ok: nucleo.rutinas.borrar(id(c), { actorId: c.get('sesion').persona_id, donde: 'panel' }) }));
 
   app.get('/api/entradas', (c) => c.json({ entradas: entradas.listar(), base: `${config.publicUrl}/entrada/` }));
   app.post('/api/entradas', async (c) => {

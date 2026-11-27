@@ -14,6 +14,8 @@ con él por WhatsApp.
   [docs/WHATSAPP.md](docs/WHATSAPP.md).
 - **Bandeja en el panel**: todas las conversaciones como en WhatsApp, con fotos, audios, videos y PDF a la vista,
   reacciones, mensajes editados o borrados, y cualquier otro archivo para descargar.
+- **Rutinas que se editan conversando** (horario, destino, con qué permisos corren) y conectores de **solo
+  lectura** que no piden aprobación por cada consulta. Ver [docs/RUTINAS.md](docs/RUTINAS.md).
 - **Cuida su disco**: limpia solo lo que ya cumplió su función (trabajos terminados, adjuntos viejos, temporales),
   avisa al 80 % y el agente ordena su propio espacio con criterio. Ver [docs/DISCO.md](docs/DISCO.md).
 - **Escucha todo** lo que llega a WhatsApp y se despierta según quién escribe: directos, grupos activos (decide por

@@ -66,7 +66,7 @@ export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((r
   // Los motores y el disco se cambian con sus herramientas (ficha y confirmación en otro mensaje).
   && !(metodo !== 'GET' && /^\/api\/(motores|disco)(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, disco = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, disco = null, rutinas = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -104,7 +104,7 @@ export function crearHerramientas({ db, disco = null, motores = null, cuentaCode
       if (!c) return 'Ese conector no existe.';
       const roles = Array.isArray(cuerpo.roles) ? cuerpo.roles.map(String) : (json(c.habilitada_para, {}).roles ?? []);
       if (metodo === 'DELETE') return `Se borra el conector ${c.app}: nadie lo puede usar más hasta conectarlo de nuevo.`;
-      return fichaConector(db, conId, { roles });
+      return fichaConector(db, conId, { roles, soloLectura: typeof cuerpo.solo_lectura === 'boolean' ? cuerpo.solo_lectura : null });
     }
     return 'Cambio de configuración de roles o conectores.';
   }
@@ -655,6 +655,57 @@ export function crearHerramientas({ db, disco = null, motores = null, cuentaCode
       },
     },
 
+    rutinas: {
+      descripcion: 'Solo el Propietario, en su charla: las rutinas que ya existen. "listar" las muestra con su estado, quién la pidió, con qué permisos corre y a quién le llega. "cambiar" edita una rutina (instrucción, horario, destino, pausar o reactivar, o que corra con tus permisos); "borrar" la quita. No crees una copia para cambiar algo: editá la que existe. Que corra con los permisos del Propietario (corre_como) y borrar se aplican recién cuando confirma en otro mensaje; lo demás, cuando te lo pide.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['listar', 'cambiar', 'borrar'] },
+          id: { type: 'string', description: 'R-n.' },
+          instruccion: { type: 'string' },
+          cuando: { type: 'string', description: 'Cron de 5 campos.' },
+          zona_horaria: { type: 'string' },
+          destino: { type: 'string', description: 'A quién le llega (teléfono con código de país o chat). Por ejemplo, el chat de quien la pidió.' },
+          destinos: { type: 'array', items: { type: 'string' }, description: 'Todos los chats a los que puede escribir (reemplaza la lista; el destino siempre queda).' },
+          activa: { type: 'boolean', description: 'false = pausar; true = reactivar.' },
+          corre_como: { type: 'string', enum: ['propietario', 'quien_la_pidio'], description: '"propietario": corre con tus permisos (conectores y lo que escribe, sin pedir aprobación cada vez) aunque la haya pedido otra persona; lo que mande lo lee el destino. "quien_la_pidio": vuelve a los permisos de quien la pidió.' },
+          confirmado: { type: 'boolean', description: 'corre_como y borrar: true solo cuando el Propietario lo confirmó en un mensaje nuevo.' },
+        },
+        required: ['accion'],
+      },
+      ejecutar(ctx, { accion, id = null, confirmado = false, ...cambios }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo || !rutinas) throw new ErrorHerramienta('Solo el Propietario, en su charla, cambia rutinas.');
+        if (accion === 'listar') {
+          const todas = rutinas.listar();
+          return todas.length ? todas.map(rutinas.describir).join('\n') : 'No hay rutinas.';
+        }
+        const r = rutinas.obtener(id);
+        if (!r) throw new ErrorHerramienta(`No existe la rutina ${id ?? ''}. Mirá las que hay con listar.`);
+        const quien = { actorId: ctx.personaId, donde: 'charla', chatId: ctx.chatId };
+        // Correr con los permisos del Propietario o borrar: primero se lo contás y lo confirma en otro mensaje.
+        const delicado = accion === 'borrar' || cambios.corre_como === 'propietario';
+        if (delicado) {
+          const clave = `rutina|${ctx.personaId}|${r.id}|${accion}|${cambios.corre_como ?? ''}`;
+          const previa = fichasMostradas.get(clave);
+          if (!confirmado || !previa) {
+            fichasMostradas.set(clave, { corridaId: ctx.corridaId, ts: reloj() });
+            const aviso = accion === 'borrar'
+              ? `Se borra R-${r.id}: deja de correr para siempre.`
+              : `R-${r.id} va a correr con tus permisos: usa tus conectores y lo que escribe sin pedir aprobación cada vez, aunque la haya pedido otra persona. Lo que mande lo lee ${rutinas.nombreChat(r.chat_destino)}, así que la instrucción tiene que dejar claro qué puede ver (por ejemplo, solo cantidades).`;
+            return `Todavía no se cambió nada. Así está:\n${rutinas.describir(r)}\n${aviso}\nContáselo al Propietario en palabras simples y preguntale si lo confirma. Cuando te diga que sí en un mensaje nuevo, repetí esta llamada con confirmado: true.`;
+          }
+          if (previa.corridaId === ctx.corridaId) throw new ErrorHerramienta('El Propietario todavía no lo confirmó: contáselo y esperá su respuesta.');
+          fichasMostradas.delete(clave);
+        }
+        try {
+          if (accion === 'borrar') { rutinas.borrar(r.id, quien); return `R-${r.id} borrada.`; }
+          if (accion !== 'cambiar') throw new ErrorHerramienta('La acción es listar, cambiar o borrar.');
+          const { rutina, que } = rutinas.cambiar(r.id, cambios, quien);
+          return que.length ? `Listo, R-${rutina.id}: ${que.join('; ')}.\n${rutinas.describir(rutina)}` : `R-${r.id} ya estaba así.`;
+        } catch (e) { throw e instanceof ErrorHerramienta ? e : new ErrorHerramienta(e.message); }
+      },
+    },
+
     iniciar_conversacion: {
       descripcion: 'Le escribe primero a una persona o grupo (otro chat). A números que nunca escribieron solo se puede con una regla de contacto aprobada o con aprobación del Propietario, y salen con ritmo suave.',
       esquema: {
@@ -911,8 +962,11 @@ export function crearHerramientas({ db, disco = null, motores = null, cuentaCode
         try {
           if (/^A-\d+$/.test(x)) {
             // El "sí" tiene que venir de un mensaje del Propietario: no de la misma corrida que hizo el pedido.
-            const pend = db.prepare('SELECT corrida_id FROM aprobaciones WHERE id = ?').get(x);
+            const pend = db.prepare('SELECT corrida_id, creada FROM aprobaciones WHERE id = ?').get(x);
             if (pend && pend.corrida_id && pend.corrida_id === ctx.corridaId) throw new ErrorHerramienta(`${x} lo pediste en esta misma corrida: esperá a que el Propietario conteste.`);
+            // Y de un mensaje escrito después de que existiera el pedido: un "sí" a otra cosa no aprueba lo que llegó después.
+            const ultimo = db.prepare("SELECT MAX(recibido) AS t FROM mensajes WHERE chat_id = ? AND from_me = 0 AND tipo != 'evento' AND session != 'interno'").get(ctx.chatId)?.t ?? 0;
+            if (pend && pend.creada && ultimo < pend.creada) throw new ErrorHerramienta(`${x} llegó después del último mensaje del Propietario: contale qué es en una línea y esperá a que diga que sí a eso.`);
             if (si && como_propietario) {
               const ap = aprobaciones.obtener(x);
               if (ap.accion !== 'rutina' || ap.estado !== 'pendiente') throw new ErrorHerramienta('"como_propietario" es solo para rutinas pendientes.');
@@ -964,7 +1018,7 @@ export function crearHerramientas({ db, disco = null, motores = null, cuentaCode
     },
 
     panel: {
-      descripcion: 'Solo el Propietario, en su charla: hace en el panel lo mismo que haría él (con sus permisos), por la API del panel. Para lo que no tiene otra herramienta: roles y sus permisos, qué roles usan cada conector, personas y su rol, clientes, rutinas, entradas, reglas de contacto, lecciones, ajustes y modelos, equipo, chats, proyectos. Leé primero (GET) para ver ids y forma, contale al Propietario qué vas a cambiar y hacelo cuando te diga que sí. Rutas útiles: GET /api/roles; PATCH /api/roles/:id {nombre?, descripcion?, permisos?}; POST /api/roles; GET /api/conectores (cada uno con habilitada_para.roles); PATCH /api/conectores/:id {roles: [nombres de rol], apagadas?: [herramientas]} (roles reemplaza la lista completa); GET /api/personas; POST /api/personas {nombre, telefono, rolId}; PATCH /api/personas/:id {nombre?, rolId?}; GET/PATCH/DELETE /api/rutinas[/:id]; GET/PATCH /api/ajustes; GET/POST/PATCH /api/clientes; GET /api/bitacora; GET /api/aprobaciones. Lo de la cuenta de cada uno (logins, contraseñas, vincular o desvincular WhatsApp, conectar o desconectar Claude, tokens) se hace en el panel, no acá.',
+      descripcion: 'Solo el Propietario, en su charla: hace en el panel lo mismo que haría él (con sus permisos), por la API del panel. Para lo que no tiene otra herramienta: roles y sus permisos, qué roles usan cada conector, personas y su rol, clientes, rutinas, entradas, reglas de contacto, lecciones, ajustes y modelos, equipo, chats, proyectos. Leé primero (GET) para ver ids y forma, contale al Propietario qué vas a cambiar y hacelo cuando te diga que sí. Rutas útiles: GET /api/roles; PATCH /api/roles/:id {nombre?, descripcion?, permisos?}; POST /api/roles; GET /api/conectores (cada uno con habilitada_para.roles); PATCH /api/conectores/:id {roles: [nombres de rol], apagadas?: [herramientas], solo_lectura?: true|false} (roles reemplaza la lista completa; solo_lectura: que ninguna de sus herramientas cuente como escritura, solo si el servicio de verdad no deja escribir con esa conexión); GET /api/personas; POST /api/personas {nombre, telefono, rolId}; PATCH /api/personas/:id {nombre?, rolId?}; GET/PATCH/DELETE /api/rutinas[/:id]; GET/PATCH /api/ajustes; GET/POST/PATCH /api/clientes; GET /api/bitacora; GET /api/aprobaciones. Lo de la cuenta de cada uno (logins, contraseñas, vincular o desvincular WhatsApp, conectar o desconectar Claude, tokens) se hace en el panel, no acá.',
       esquema: {
         type: 'object',
         properties: {
@@ -984,6 +1038,7 @@ export function crearHerramientas({ db, disco = null, motores = null, cuentaCode
         const camino = r.split('?')[0];
         if (!rutaPanelPermitida(camino, m)) throw new ErrorHerramienta('Eso lo hace el Propietario directo en el panel (es de su cuenta o de la conexión del sistema).');
         if (/^\/api\/paquetes(\/|$)/.test(camino)) throw new ErrorHerramienta('Para paquetes usá importar_paquete (con ensayo y confirmación) o exportar_paquete.');
+        if (m !== 'GET' && /^\/api\/rutinas(\/|$)/.test(camino)) throw new ErrorHerramienta('Para crear rutinas usá programar_rutina; para cambiarlas, pausarlas o borrarlas, la herramienta rutinas.');
         // Roles y conectores: primero la ficha al Propietario, y se aplica recién cuando confirma (en otro mensaje).
         if (m !== 'GET' && /^\/api\/(roles|conectores)(\/|$)/.test(camino)) {
           const clave = `${ctx.personaId}|${m}|${camino}|${JSON.stringify(cuerpo ?? {})}`;

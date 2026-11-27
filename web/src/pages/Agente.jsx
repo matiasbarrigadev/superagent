@@ -154,12 +154,47 @@ function Trabajos() {
   );
 }
 
+function EditarRutina({ r, alTerminar }) {
+  const [f, setF] = useState({ instruccion: r.instruccion, cuando: r.cuando, zona_horaria: r.zona_horaria, destino: r.chat_destino ?? '', mios: !!r.ejecuta_como && r.ejecuta_como !== r.creada_por });
+  const { cargando, error, correr } = useAccion();
+  const cambio = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const guardar = correr('g', async () => {
+    const eraMia = !!r.ejecuta_como && r.ejecuta_como !== r.creada_por;
+    await patch(`/api/rutinas/${r.id}`, {
+      instruccion: f.instruccion, cuando: f.cuando, zona_horaria: f.zona_horaria, destino: f.destino || undefined,
+      ...(f.mios !== eraMia ? { corre_como: f.mios ? 'propietario' : 'quien_la_pidio' } : {}),
+    });
+    alTerminar();
+  });
+  return (
+    <div className="grid gap-3 rounded-xl bg-stone-50 p-3 dark:bg-stone-950/50">
+      <AreaTexto etiqueta="Instrucción" rows={4} value={f.instruccion} onChange={cambio('instruccion')} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Campo etiqueta="Cuándo (cron)" ayuda="Ej.: 0 9 * * 1-5 = lunes a viernes 9:00" value={f.cuando} onChange={cambio('cuando')} />
+        <Campo etiqueta="Zona horaria" value={f.zona_horaria} onChange={cambio('zona_horaria')} />
+        <Campo etiqueta="Le llega a" ayuda="Teléfono con código de país o chat" value={f.destino} onChange={cambio('destino')} />
+      </div>
+      <label className="flex items-start gap-2 text-sm">
+        <Interruptor etiqueta="Corre con mis permisos" prendido={f.mios} alCambiar={(v) => setF({ ...f, mios: v })} />
+        <span>Corre con mis permisos <span className="block text-xs text-stone-500">Usa tus conectores sin pedir aprobación cada vez, aunque la haya pedido otra persona. Lo que manda lo lee el destino: que la instrucción diga qué puede ver.</span></span>
+      </label>
+      {error && <Aviso>{error}</Aviso>}
+      <div className="flex gap-2">
+        <Boton cargando={cargando === 'g'} onClick={guardar}>Guardar</Boton>
+        <Boton variante="fantasma" onClick={alTerminar}>Cancelar</Boton>
+      </div>
+    </div>
+  );
+}
+
 function Rutinas() {
   const { datos, cargar } = useDatos('/api/rutinas');
   const { error, correr } = useAccion();
+  const [editando, setEditando] = useState(null);
   return (
     <Tarjeta titulo="Rutinas">
-      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Se crean pidiéndoselas al agente ("todos los lunes a las 9, mandame el resumen").</p>
+      <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">Se crean y se cambian pidiéndoselo al agente ("todos los lunes a las 9, mandame el resumen"). También se editan acá.</p>
+      {editando && <div className="mb-4"><EditarRutina key={editando.id} r={editando} alTerminar={() => { setEditando(null); cargar(); }} /></div>}
       <Tabla
         filas={datos?.rutinas ?? []}
         vacio="No hay rutinas."
@@ -168,7 +203,8 @@ function Rutinas() {
             <div className="max-w-md">
               <span className="font-mono text-xs font-semibold text-stone-500">R-{r.id}</span>
               <p>{r.instruccion}</p>
-              <p className="text-xs text-stone-500">De {r.creador ?? 'alguien'} · destinos: {r.destinos.join(', ') || '—'}</p>
+              <p className="text-xs text-stone-500">La pidió {r.creador ?? 'alguien'} · le llega a {r.destino_nombre}</p>
+              {r.ejecuta_como && r.ejecuta_como !== r.creada_por && <p className="mt-1"><Chip tono="violeta">Corre con permisos de {r.corre_como}</Chip></p>}
               {r.pausa_motivo && !r.activa && <p className="text-xs text-amber-700 dark:text-amber-400">{r.pausa_motivo}</p>}
             </div>
           ) },
@@ -180,7 +216,12 @@ function Rutinas() {
               <Interruptor etiqueta={`Activar R-${r.id}`} disabled={!r.aprobada} prendido={r.activa} alCambiar={(v) => correr('a', async () => { await patch(`/api/rutinas/${r.id}`, { activa: v }); cargar(); })()} />
             </div>
           ) },
-          { clave: 'acciones', titulo: '', alinear: 'derecha', render: (r) => <Boton variante="fantasma" onClick={correr('b', async () => { await borrar(`/api/rutinas/${r.id}`); cargar(); })}>Borrar</Boton> },
+          { clave: 'acciones', titulo: '', alinear: 'derecha', render: (r) => (
+            <div className="flex justify-end gap-1">
+              <Boton variante="fantasma" onClick={() => setEditando(r)}>Editar</Boton>
+              <Boton variante="fantasma" onClick={correr('b', async () => { if (!window.confirm(`¿Borrar R-${r.id}? Deja de correr para siempre.`)) return; await borrar(`/api/rutinas/${r.id}`); cargar(); })}>Borrar</Boton>
+            </div>
+          ) },
         ]}
       />
       {error && <div className="mt-3"><Aviso>{error}</Aviso></div>}

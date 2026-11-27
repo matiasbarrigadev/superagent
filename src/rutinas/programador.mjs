@@ -3,7 +3,7 @@
 import { proxima } from './cron.mjs';
 import { auditar } from '../db/index.mjs';
 
-export function crearProgramador({ db, politica, motor, avisos, log = console }) {
+export function crearProgramador({ db, politica, motor, avisos, bitacora = null, log = console }) {
   function tick(ahora) {
     const vencidas = db.prepare('SELECT * FROM rutinas WHERE activa = 1 AND aprobada = 1 AND proxima IS NOT NULL AND proxima <= ?').all(ahora);
     for (const r of vencidas) {
@@ -16,6 +16,7 @@ export function crearProgramador({ db, politica, motor, avisos, log = console })
         db.prepare('UPDATE rutinas SET activa = 0, pausa_motivo = ? WHERE id = ?').run('Quien la creó ya no tiene permiso para programar rutinas.', r.id);
         avisos.alPropietario(`La rutina R-${r.id} se pausó: ${creador?.nombre ?? 'quien la creó'} ya no tiene permiso para programar rutinas.`, { tipo: 'aviso' });
         auditar(db, 'rutina.pausar', { detalle: { id: r.id } });
+        bitacora?.anotar({ donde: 'sistema', resultado: 'hecho', que: `Rutina R-${r.id}: pausada por el sistema (${creador?.nombre ?? 'quien la creó'} ya no tiene permiso para programar rutinas)`, ref: `R-${r.id}` });
         continue;
       }
       let sig = null;

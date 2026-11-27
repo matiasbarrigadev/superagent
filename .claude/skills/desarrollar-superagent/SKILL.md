@@ -63,6 +63,10 @@ curso. Docs: [docs/WHATSAPP.md](../../../docs/WHATSAPP.md).
 mostrarlo en el desglose. La limpieza solo borra lo que ya cumplió su función; nunca la base, los secretos, las
 charlas en curso ni el entorno del Propietario. Docs: [docs/DISCO.md](../../../docs/DISCO.md).
 
+**Herramientas de conectores**: lectura o escritura sale de lo que declara cada herramienta (`readOnlyHint`) o de
+que el conector sea de solo lectura (`src/conectores/lectura.mjs`). Nada específico de un servicio en el código.
+Docs: [docs/RUTINAS.md](../../../docs/RUTINAS.md).
+
 **Agregar un permiso**: actualizá también el test de la matriz de roles (`test/roles.test.mjs`, cuenta del catálogo).
 
 **Cambiar la base**: nueva migración `src/db/migraciones/NNN_nombre.sql` (siguiente número, nunca edites una ya

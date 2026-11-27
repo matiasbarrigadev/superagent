@@ -48,10 +48,21 @@ function Conector({ c, roles, recargar }) {
               <p className="mt-1 text-xs text-stone-500">Además, cada rol necesita "Herramientas del negocio": "solo leer" ve las que no escriben. Lo que escribe, pedido por un Colaborador, pasa por tu aprobación.</p>
             </div>
           )}
+          <label className="flex items-start gap-2 text-sm">
+            <Interruptor etiqueta="Solo lectura" prendido={c.solo_lectura} disabled={c.solo_lectura && !hab.solo_lectura}
+              alCambiar={(v) => correr('sl', async () => { await patch(`/api/conectores/${c.id}`, { solo_lectura: v }); recargar(); })()} />
+            <span>Solo lectura
+              <span className="block text-xs text-stone-500">
+                {c.solo_lectura && !hab.solo_lectura
+                  ? 'Su dirección le pide al servicio que no deje escribir (read_only): ninguna herramienta cuenta como escritura.'
+                  : 'Ninguna herramienta cuenta como escritura: no piden aprobación y las ve un rol que solo lee. Prendelo solo si el servicio de verdad no deja escribir con esta conexión (conectado en modo lectura o con un usuario que solo lee).'}
+              </span>
+            </span>
+          </label>
           <ul className="flex flex-col divide-y divide-stone-200 text-sm dark:divide-stone-800">
             {c.herramientas.map((h) => (
               <li key={h.nombre} className="flex items-center justify-between gap-3 py-1.5">
-                <span><code>{h.nombre}</code> {h.escribe && <Estado tono="espera">escribe</Estado>}<span className="block text-xs text-stone-500">{h.descripcion?.slice(0, 140)}</span></span>
+                <span><code>{h.nombre}</code> {h.escribe && !c.solo_lectura && <Estado tono="espera">escribe</Estado>}<span className="block text-xs text-stone-500">{h.descripcion?.slice(0, 140)}</span></span>
                 <Interruptor etiqueta={`Habilitar ${h.nombre}`} prendido={!apagadas.has(h.nombre)}
                   alCambiar={(v) => correr('h', async () => { const s = new Set(apagadas); v ? s.delete(h.nombre) : s.add(h.nombre); await patch(`/api/conectores/${c.id}`, { apagadas: [...s] }); recargar(); })()} />
               </li>

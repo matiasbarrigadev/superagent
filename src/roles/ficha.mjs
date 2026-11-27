@@ -3,15 +3,21 @@
 // aplica cuando el Propietario confirma. Se arma con los datos reales, no con lo que el modelo cree.
 import { enPalabras, normalizar } from './permisos.mjs';
 import { json } from '../util.mjs';
+import { soloLectura, pideSoloLectura } from '../conectores/lectura.mjs';
 
 /** Conectores activos de la instalación con sus herramientas (lectura / escritura) y los roles que los tienen. */
 function conectoresActivos(db) {
-  return db.prepare("SELECT id, app, permisos, habilitada_para FROM conexiones WHERE estado = 'activa' AND alcance <> 'persona' ORDER BY id").all()
-    .map((c) => {
-      const hab = json(c.habilitada_para, { roles: [], apagadas: [] });
-      const hs = json(c.permisos, []).filter((h) => !(hab.apagadas ?? []).includes(h.nombre));
-      return { id: c.id, app: c.app, roles: hab.roles ?? [], lee: hs.filter((h) => !h.escribe).map((h) => h.nombre), escribe: hs.filter((h) => h.escribe).map((h) => h.nombre) };
-    });
+  return db.prepare("SELECT id, app, permisos, habilitada_para, url_mcp FROM conexiones WHERE estado = 'activa' AND alcance <> 'persona' ORDER BY id").all()
+    .map(herramientasDe);
+}
+
+/** Herramientas de un conector separadas en lectura y escritura (si es de solo lectura, todas leen). */
+function herramientasDe(c, { soloLecturaForzada = null } = {}) {
+  const hab = json(c.habilitada_para, { roles: [], apagadas: [] });
+  const hs = json(c.permisos, []).filter((h) => !(hab.apagadas ?? []).includes(h.nombre));
+  const sl = soloLecturaForzada ?? soloLectura(c);
+  const escribe = (h) => h.escribe && !sl;
+  return { id: c.id, app: c.app, roles: hab.roles ?? [], soloLectura: sl, lee: hs.filter((h) => !escribe(h)).map((h) => h.nombre), escribe: hs.filter(escribe).map((h) => h.nombre) };
 }
 
 const lista = (xs, n = 12) => (xs.length > n ? `${xs.slice(0, n).join(', ')} y ${xs.length - n} más` : xs.join(', '));
@@ -52,11 +58,16 @@ export function fichaRol(db, { nombre, descripcion = null, permisos }, { conecto
 }
 
 /** Ficha de un cambio de conector: cómo lo usaría cada rol que lo tenga. */
-export function fichaConector(db, conectorId, { roles }) {
-  const c = conectoresActivos(db).find((x) => x.id === Number(conectorId))
-    ?? (() => { const f = db.prepare('SELECT id, app, permisos, habilitada_para FROM conexiones WHERE id = ?').get(Number(conectorId)); return f ? { id: f.id, app: f.app, lee: json(f.permisos, []).filter((h) => !h.escribe).map((h) => h.nombre), escribe: json(f.permisos, []).filter((h) => h.escribe).map((h) => h.nombre) } : null; })();
-  if (!c) return 'Ese conector no existe.';
+export function fichaConector(db, conectorId, { roles, soloLectura: nuevaLectura = null }) {
+  const f = db.prepare('SELECT id, app, permisos, habilitada_para, url_mcp FROM conexiones WHERE id = ?').get(Number(conectorId));
+  if (!f) return 'Ese conector no existe.';
+  const antes = soloLectura(f);
+  const c = herramientasDe(f, { soloLecturaForzada: nuevaLectura == null ? null : (nuevaLectura || pideSoloLectura(f.url_mcp)) });
   const lineas = [`Conector ${c.app}, habilitado para: ${roles.join(', ') || 'ningún rol'}.`];
+  if (pideSoloLectura(f.url_mcp)) lineas.push('- Es de solo lectura: su URL se lo pide al servicio (read_only), así que el propio servicio no deja escribir. Ninguna herramienta cuenta como escritura.');
+  else if (nuevaLectura === true && !antes) lineas.push('- Pasa a solo lectura: todas sus herramientas cuentan como lectura, no piden aprobación y las ve un rol que solo lee. Confirmalo solo si el servicio de verdad no deja escribir con esta conexión (por ejemplo, conectado en modo lectura o con un usuario que solo lee). Si no, quien lo tenga podría escribir sin aprobación.');
+  else if (nuevaLectura === false && antes) lineas.push('- Deja de ser de solo lectura: lo que escribe o puede escribir vuelve a pedir aprobación a quien no es Propietario.');
+  else if (c.soloLectura) lineas.push('- Marcado como de solo lectura por un Propietario.');
   for (const nombre of roles) {
     const r = db.prepare('SELECT nombre, descripcion, permisos FROM roles WHERE nombre = ?').get(nombre);
     if (!r) { lineas.push(`- ${nombre}: ese rol no existe.`); continue; }
