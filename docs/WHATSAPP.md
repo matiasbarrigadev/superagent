@@ -67,6 +67,21 @@ Con vos, el agente tiene además la herramienta `whatsapp`: acceso directo a la 
 
 Lo que dejaría al agente sin número (vincular, desvincular, cambiar el webhook) solo se hace en el panel.
 
+## Cuidar el número
+
+WhatsApp vigila sobre todo a los números nuevos que le escriben primero a gente que nunca les escribió. El gateway lo
+cuida solo, para todas las instalaciones:
+
+- **Ritmo como una persona**: marca leído, muestra "escribiendo…" un rato acorde al largo y recién ahí manda.
+- **Mensajes en frío con tope**: a quien nunca escribió, como mucho 5 por día la primera semana del número y 15 la
+  segunda (`frio_por_dia_nuevo`, `frio_por_dia_reciente`), además del ritmo suave de siempre. Lo que pasa el tope
+  sale al día siguiente.
+- **Error 463**: es WhatsApp diciendo que ese número no puede iniciar charlas así. No se reintenta (cada intento
+  empeora la reputación), por 72 h no sale ningún mensaje en frío desde ese número y el agente se entera en la
+  charla para pedir que la persona escriba primero (con el link `wa.me`).
+- **Agenda**: a quien da de alta el Propietario se lo agenda en el teléfono del número principal, como haría una
+  persona (`agendar_contactos`, prendido por defecto).
+
 ## La bandeja del panel
 
 **Panel → Bandeja** muestra todas las conversaciones como en WhatsApp:

@@ -38,7 +38,7 @@ export function tiempoDeEscritura(texto, azar = Math.random) {
   return Math.round(base * (0.8 + azar() * 0.4));
 }
 
-export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null, dormir = (ms) => new Promise((r) => setTimeout(r, ms)), reloj = () => Date.now(), log = console }) {
+export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null, alRechazo = null, dormir = (ms) => new Promise((r) => setTimeout(r, ms)), reloj = () => Date.now(), log = console }) {
   const ins = db.prepare(`INSERT INTO salida (chat_id, tipo, contenido, responde_a, contacto_nuevo, estado, no_antes_de, corrida_id, origen, creado, sesion)
     VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`);
   const insPanel = db.prepare(`INSERT INTO mensajes (session, id, chat_id, from_me, tipo, cuerpo, ts, procesado, recibido, canal)
@@ -71,6 +71,25 @@ export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null
     return desde > ahora ? desde : 0;
   }
 
+  // WhatsApp cuida a los números nuevos: escribirle primero a quien nunca escribió es lo que más los arriesga.
+  // Un error 463 es WhatsApp diciendo "este número no puede iniciar charlas así": no se reintenta (cada intento empeora
+  // la reputación) y por unos días no sale ningún mensaje en frío desde ese número.
+  const RESTRICCION_MS = 72 * 3_600_000;
+  const claveRestriccion = (sesion) => `wa_restriccion:${sesion ?? 'principal'}`;
+  const restringidoHasta = (sesion) => Number(ajustes?.get(claveRestriccion(sesion)) ?? 0);
+  /** Cuántos mensajes en frío por día según la edad del número en el sistema (los nuevos, pocos). */
+  function cupoEnFrio(sesion, ahora) {
+    const creada = sesion ? db.prepare('SELECT creada FROM sesiones_wa WHERE nombre = ?').get(sesion)?.creada : null;
+    if (!creada) return Infinity;
+    const dias = (ahora - creada) / 86_400_000;
+    return dias < 7 ? Math.max(1, ajustes?.num('frio_por_dia_nuevo', 5) ?? 5) : dias < 14 ? Math.max(1, ajustes?.num('frio_por_dia_reciente', 15) ?? 15) : Infinity;
+  }
+  function rechazar(f, sesion, motivo) {
+    db.prepare("UPDATE salida SET estado = 'fallido', error = ?, sesion = COALESCE(sesion, ?) WHERE id = ?").run(motivo, sesion ?? null, f.id);
+    log.warn('[salida] rechazado', f.chat_id, motivo);
+    try { alRechazo?.({ chatId: f.chat_id, sesion, corridaId: f.corrida_id, origen: f.origen, motivo }); } catch {}
+  }
+
   let ocupado = false;
   async function procesar() {
     if (ocupado) return 0;
@@ -101,6 +120,20 @@ export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null
           }
           if (!f.sesion) db.prepare('UPDATE salida SET sesion = ? WHERE id = ?').run(sesion, f.id);
           cliente = numeros.cliente(sesion);
+          if (f.contacto_nuevo) {
+            if (restringidoHasta(sesion) > ahora) {
+              rechazar(f, sesion, `WhatsApp restringió a este número para iniciar charlas (error 463): no sale nada en frío hasta ${new Date(restringidoHasta(sesion)).toISOString().slice(0, 16)} UTC.`);
+              continue;
+            }
+            const cupo = cupoEnFrio(sesion, ahora);
+            if (Number.isFinite(cupo)) {
+              const hechos = db.prepare("SELECT enviado FROM salida WHERE contacto_nuevo = 1 AND estado = 'enviado' AND sesion = ? AND enviado > ? ORDER BY enviado").all(sesion, ahora - 86_400_000).map((r) => r.enviado);
+              if (hechos.length >= cupo) {
+                db.prepare('UPDATE salida SET no_antes_de = ? WHERE id = ?').run(hechos[hechos.length - cupo] + 86_400_000, f.id);
+                continue;
+              }
+            }
+          }
         }
         try {
           const d = f.tipo === 'texto' ? null : JSON.parse(f.contenido);
@@ -144,6 +177,12 @@ export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null
           db.prepare("UPDATE salida SET estado = 'enviado', enviado = ?, intentos = intentos + 1, waha_id = ? WHERE id = ?").run(reloj(), wahaId ?? null, f.id);
           enviados++;
         } catch (e) {
+          if (/\berror 463\b/i.test(String(e.message)) && !esPanel(f.chat_id)) {
+            const sesion = f.sesion ?? numeros?.sesionPara?.(f.chat_id) ?? null;
+            ajustes?.set(claveRestriccion(sesion), String(ahora + RESTRICCION_MS));
+            rechazar(f, sesion, 'WhatsApp no dejó iniciar la charla (error 463): este número no puede escribirle primero a quien no le escribió. No se reintenta.');
+            continue;
+          }
           const intentos = f.intentos + 1;
           const fallido = intentos >= 6;
           db.prepare('UPDATE salida SET intentos = ?, error = ?, estado = ?, no_antes_de = ? WHERE id = ?')

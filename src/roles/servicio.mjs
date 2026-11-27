@@ -8,7 +8,7 @@ export class ErrorRoles extends Error {
   constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 
-export function crearRoles({ db, politica }) {
+export function crearRoles({ db, politica, alAlta = null }) {
   const qRol = db.prepare('SELECT * FROM roles WHERE id = ?');
   const idPropietario = () => db.prepare("SELECT id FROM roles WHERE nombre = 'Propietario' AND predefinido = 1").get().id;
   const propietariosActivos = () => db.prepare('SELECT COUNT(*) AS n FROM personas WHERE rol_id = ? AND activa = 1').get(idPropietario()).n;
@@ -110,6 +110,7 @@ export function crearRoles({ db, politica }) {
     }
     avalar(actor, id, r.id);
     auditar(db, 'persona.alta', { actor: String(actor.personaId ?? ''), detalle: { id, rol: r.nombre } });
+    try { alAlta?.({ id, nombre: nom ?? previa?.nombre ?? null, telefono: tel }); } catch {}
     return id;
   }
 

@@ -60,7 +60,7 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
   }
   unificarChatsLid(db, log);
   const politica = crearPolitica(db);
-  const roles = crearRoles({ db, politica });
+  const roles = crearRoles({ db, politica, alAlta: (p) => agendarContacto(p) });
   const memoria = crearMemoria(db);
   const entorno = crearEntorno({ db, config, reloj });
   const bitacora = crearBitacora({ db, reloj });
@@ -68,7 +68,7 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
   const archivos = crearArchivos({ db, config, reloj });
   // Números de WhatsApp (sesiones de WAHA) con su política; el principal es `waha`.
   const numeros = crearNumeros({ db, principal: waha, nombrePrincipal: config.waha?.session ?? 'default', crearCliente: crearClienteWa, bitacora, reloj, log });
-  const salida = crearSalida({ db, waha, numeros, ajustes, archivos, dormir, reloj, log });
+  const salida = crearSalida({ db, waha, numeros, ajustes, archivos, dormir, alRechazo: (r) => avisarRechazo(r), reloj, log });
   // "Escribiendo…" por el número que corresponde al chat (y solo si ese número puede enviar ahí).
   const waRuteado = {
     ...waha,
@@ -98,6 +98,27 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
     for (const d of duenos) ref.motor.despertar({ chatId: `${d.telefono}@c.us`, personaId: d.id, origen, texto });
     return duenos.length;
   }
+  /**
+   * A quien el Propietario da de alta se lo agenda en el teléfono del número principal (como haría una persona). WAHA
+   * pide repetirlo para que sincronice; si falla, no pasa nada.
+   */
+  function agendarContacto({ nombre, telefono }) {
+    if (!nombre || !telefono || !ajustes.bool('agendar_contactos', true) || !waha?.agendar) return;
+    const chatId = `${telefono}@c.us`;
+    const una = () => Promise.resolve(waha.agendar(chatId, { nombre })).catch(() => false);
+    una().then(() => { const t = setTimeout(una, 5000); t.unref?.(); });
+  }
+
+  /** WhatsApp no dejó mandar algo (por ejemplo, un 463): el agente lo sabe en la charla donde lo pidió. */
+  function avisarRechazo({ chatId, sesion, corridaId, motivo }) {
+    const tel = String(chatId).split('@')[0];
+    const numero = db.prepare('SELECT numero FROM sesiones_wa WHERE nombre = ?').get(sesion ?? config.waha?.session ?? 'default')?.numero;
+    const texto = `[WhatsApp no dejó escribirle a +${tel}] ${motivo} No insistas ni le escribas en frío a otros por ahora: lo que destraba es que esa persona escriba primero ${numero ? `(el link para que te escriba es https://wa.me/${numero})` : ''}. Contáselo al Propietario en una línea si hacía falta ese mensaje.`;
+    const c = corridaId ? db.prepare('SELECT chat_id, persona_id FROM corridas WHERE id = ?').get(corridaId) : null;
+    if (c?.chat_id && ref.motor) ref.motor.despertar({ chatId: c.chat_id, personaId: c.persona_id, origen: 'whatsapp', texto });
+    else despertarPropietarios({ origen: 'whatsapp', texto });
+  }
+
   /**
    * Algo que terminó fuera de la charla (una autorización por link) le llega al agente en el chat donde se pidió,
    * para que siga la conversación sabiéndolo. Devuelve false si no hay agente (y entonces va un aviso directo).

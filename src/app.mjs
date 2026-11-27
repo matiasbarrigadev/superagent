@@ -12,7 +12,7 @@ import { montarPanel, PREFIJOS_PANEL } from './rutas/panel.mjs';
 import { SECCIONES_PANEL, accesosDe, puedeRuta } from './auth/accesos.mjs';
 
 const COOKIE = 'sa_sesion';
-export const VERSION = '0.9.9';
+export const VERSION = '0.9.10';
 
 export function crearApp({ db, config, auth, waha, claude, nucleo, upgradeWebSocket = null, log = console }) {
   const app = new Hono();

@@ -188,6 +188,16 @@ export function crearWaha({ url, apiKey, session, hookUrl, hmacKey, fetch: f = g
       try { await llamar(prendido ? '/api/startTyping' : '/api/stopTyping', { method: 'POST', body: { session, chatId } }); } catch {}
     },
 
+    /** Agenda (o actualiza) un contacto en la libreta del teléfono vinculado. Best effort. */
+    async agendar(chatId, { nombre }) {
+      const [first, ...resto] = String(nombre ?? '').trim().split(/\s+/);
+      if (!first) return false;
+      try {
+        const r = await llamar(`/api/${session}/contacts/${encodeURIComponent(chatId)}`, { method: 'PUT', body: { firstName: first, lastName: resto.join(' ') } });
+        return r.ok;
+      } catch { return false; }
+    },
+
     async visto(chatId) {
       try { await llamar('/api/sendSeen', { method: 'POST', body: { session, chatId } }); } catch {}
     },
