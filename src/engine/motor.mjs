@@ -14,7 +14,7 @@ const ES_DESPERTAR_PROPIO = /^(rutina|entrada):/;
 
 export function crearMotor({
   db, config = {}, ajustes, politica, armador, ejecutar, mcp, salida, avisos, aprobaciones, propuestas,
-  archivos = null, aislamiento = null, conectores = null, repos = null, sesiones = null, waha = null, consumo = null, motores = null, preguntar = null, alFallaRutina = null, reloj = () => Date.now(), log = console,
+  archivos = null, aislamiento = null, conectores = null, repos = null, sesiones = null, waha = null, consumo = null, motores = null, preguntar = null, alFallaRutina = null, actividad = null, reloj = () => Date.now(), log = console,
 }) {
   const pendientes = new Map(); // chatId → { primero, listoEn }
   const corriendo = new Set();
@@ -137,6 +137,12 @@ export function crearMotor({
   }
 
   /** Llega un mensaje (de WhatsApp o del panel). Decide si dispara una corrida y la programa. */
+  /** El gateway no le pasa el mensaje al agente: queda marcado con el motivo (se ve en "Ver al agente"). */
+  function descartar(m, motivo) {
+    marcar([m.seq], 1);
+    try { db.prepare('UPDATE mensajes SET descarte = ? WHERE seq = ?').run(motivo, m.seq); } catch {}
+  }
+
   async function alMensaje(m) {
     const ahora = reloj();
     if (m.personaId && !m.grupo && comandoPropietario(m)) return 'comando';
@@ -154,16 +160,16 @@ export function crearMotor({
       return 'pausa';
     }
     const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(m.chatId);
-    if (!chat || !chat.activo) { marcar([m.seq], 1); return 'chat_inactivo'; }
+    if (!chat || !chat.activo) { descartar(m, 'chat_inactivo'); return 'chat_inactivo'; }
     // Grupos: "solo menciones" ignora lo que no lo nombra; los atentos (por defecto) leen todo y deciden después.
     const atento = m.grupo && !chat.responder_solo_si_mencionan;
-    if (m.grupo && !m.menciona && !m.responde && !atento) { marcar([m.seq], 1); return 'contexto'; }
+    if (m.grupo && !m.menciona && !m.responde && !atento) { descartar(m, 'contexto'); return 'contexto'; }
     const rol = politica.rolDe(m.personaId, chat.cliente_id ?? 1);
-    if (!rol.permisos.conversar) { marcar([m.seq], 1); return 'sin_conversar'; }
+    if (!rol.permisos.conversar) { descartar(m, 'sin_conversar'); return 'sin_conversar'; }
     const persona = m.personaId ? db.prepare('SELECT alta_manual FROM personas WHERE id = ?').get(m.personaId) : null;
     const sinAlta = !persona?.alta_manual && !esPanel(m.chatId);
     if (sinAlta && !db.prepare('SELECT responder_sin_alta FROM cuentas WHERE id = 1').get()?.responder_sin_alta) {
-      marcar([m.seq], 1);
+      descartar(m, 'sin_alta');
       return 'sin_alta';
     }
     // La espera de silencio junta mensajes seguidos. Con el Propietario en su chat es corta: es una charla de trabajo.
@@ -289,6 +295,8 @@ export function crearMotor({
     };
     // Un trabajo con proyecto recibe su clon del repo, en su carpeta y con su usuario, antes de arrancar.
     if (trabajo?.proyecto_id && trabajo?.rama && repos) spec.preparar = (lugar) => repos.prepararClon(trabajo.proyecto_id, lugar, trabajo.rama);
+    // Cada paso queda para "Ver al agente" (tachado y recortado).
+    if (actividad) spec.alPaso = (p) => actividad.registrar(corridaId, p);
     const token = mcp.registrar(ctx);
     spec.mcp = { url: config.mcpUrl ?? 'http://127.0.0.1:8081/mcp', token };
 
@@ -340,6 +348,7 @@ export function crearMotor({
     // El chat del Propietario donde se trabajó último: ahí lo despiertan los avisos de su entorno.
     if (spec.completo && chatId) { ajustes.set('propietario_ultimo_chat', chatId); ajustes.set('propietario_persona', String(personaId ?? '')); }
     if (consumo && r.uso) consumo.revisar().catch(() => {});
+    try { actividad?.podar(); } catch {}
     auditar(db, `corrida.${tipo}`, { actor: String(ctx.personaOrigen ?? ''), rol: spec.rol.nombre, decision: r.ok ? 'ok' : r.tipoError, detalle: { corridaId, llamadas: ctx.llamadas.map((l) => l.nombre), herramientas: r.herramientas } });
 
     if (!r.ok && tipo === 'rutina' && rutina && !pausada() && !['sin_sesion', 'limite', 'sin_binario'].includes(r.tipoError)) {

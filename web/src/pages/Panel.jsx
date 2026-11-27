@@ -10,7 +10,7 @@ import {
 import Inicio from './Inicio.jsx';
 import Bandeja from './Bandeja.jsx';
 import Ajustes from './Ajustes.jsx';
-import Chat from './Chat.jsx';
+import VerAgente from './VerAgente.jsx';
 import Personas from './Personas.jsx';
 import Agente from './Agente.jsx';
 import Conexiones from './Conexiones.jsx';
@@ -24,7 +24,7 @@ const SECCIONES = [
   // requiere: sección de acceso que necesita un invitado ("libre" = cualquiera; sin requiere = solo acceso total).
   { id: 'inicio', nombre: 'Inicio', Icono: IconoInicio, requiere: 'libre' },
   { id: 'bandeja', nombre: 'Bandeja', Icono: IconoBandeja, completa: true, requiere: 'bandeja' },
-  { id: 'chat', nombre: 'Hablar con el agente', corto: 'Agente IA', Icono: IconoChat, completa: true },
+  { id: 'chat', nombre: 'Ver al agente', corto: 'Agente IA', Icono: IconoChat, completa: true },
   { separador: 'Equipo' },
   { id: 'personas', nombre: 'Personas', Icono: IconoPersonas, requiere: 'equipo' },
   { id: 'clientes', nombre: 'Clientes', Icono: IconoClientes, requiere: 'equipo' },
@@ -191,7 +191,7 @@ export default function Panel({ usuario, secciones, version, alSalir }) {
         {actual?.completa ? (
           <main className="min-h-0 flex-1">
             {seccion === 'bandeja' && <Bandeja />}
-            {seccion === 'chat' && <Chat />}
+            {seccion === 'chat' && <VerAgente />}
           </main>
         ) : (
           <main className="scroll-fino min-h-0 flex-1 overflow-y-auto">

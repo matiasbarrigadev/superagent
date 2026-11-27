@@ -58,12 +58,19 @@ export function crearEjecutorComun({ adaptadores, aislamiento, lanzar = spawnNod
       }
       const r = { ok: false, sessionId: null, resultado: '', error: null, tipoError: null, herramientas: [], codigoError: null };
       let buf = '', bufErr = '', err = '', vencida = false, cortada = null;
+      // Pasos para "Ver al agente": el lector de cada motor los da si sabe; si no, al menos qué herramientas usó.
+      const emitir = (p) => { try { spec.alPaso?.(p); } catch {} };
+      let vistas = 0;
+      const leer = (l) => {
+        lector.linea(l, r, emitir);
+        if (!lector.pasosPropios) while (vistas < r.herramientas.length) emitir({ tipo: 'herramienta', nombre: r.herramientas[vistas++] });
+      };
       const cortar = (tipo) => { if (cortada) return; cortada = tipo; try { hijo.kill('SIGKILL'); } catch {} };
       const reloj = setTimeout(() => { vencida = true; try { hijo.kill('SIGKILL'); } catch {} }, timeoutMs);
       hijo.stdout.on('data', (d) => {
         buf += d;
         let i;
-        while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); if (l.trim()) lector.linea(l, r); }
+        while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); if (l.trim()) leer(l); }
       });
       hijo.stderr.on('data', (d) => {
         if (err.length < 20_000) err += d;
@@ -82,7 +89,7 @@ export function crearEjecutorComun({ adaptadores, aislamiento, lanzar = spawnNod
       });
       hijo.on('close', (codigo) => {
         clearTimeout(reloj);
-        if (buf.trim()) lector.linea(buf, r);
+        if (buf.trim()) leer(buf);
         if (cortada) { fin({ ...r, ok: false, tipoError: cortada, error: r.error || `${ad.nombre}: ${cortada === 'limite' ? 'se alcanzó el límite de uso' : 'la credencial no funciona'}` }); return; }
         if (vencida) { fin({ ...r, ok: false, tipoError: 'tiempo', error: 'La corrida tardó demasiado y se cortó.' }); return; }
         lector.cerrar?.(r, { codigo, err });

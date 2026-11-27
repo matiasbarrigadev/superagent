@@ -10,6 +10,7 @@ import { auditar } from '../db/index.mjs';
 import { json } from '../util.mjs';
 import { CATALOGO } from '../conectores/servicio.mjs';
 import { CLAVES_PROVEEDOR } from '../engine/opencode.mjs';
+import { montarActividad } from './actividad.mjs';
 
 const AJUSTES_EDITABLES = {
   nombre_agente: (v) => (v == null || v === '' ? null : String(v).trim().slice(0, 40)),
@@ -591,6 +592,8 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
     auditar(db, 'paquete.exportar', { actor: c.get('sesion').email });
     return c.json(nucleo.paquetes.exportar());
   });
+  montarActividad(app, { db, nucleo });
+
 
   app.get('/api/entorno', (c) => {
     if (!esDueno(c)) return c.json({ error: 'Solo el Propietario.' }, 403);
@@ -633,4 +636,4 @@ export function montarPanel(app, { db, nucleo, config, cuerpo }) {
 }
 
 export const PREFIJOS_PANEL = ['/api/resumen', '/api/personas', '/api/roles', '/api/ajustes', '/api/modelos', '/api/equipo', '/api/chats', '/api/chat', '/api/inbox',
-  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes', '/api/motores', '/api/disco'];
+  '/api/propuestas', '/api/aprobaciones', '/api/avisos', '/api/trabajos', '/api/rutinas', '/api/entradas', '/api/reglas', '/api/clientes', '/api/cuenta', '/api/lecciones', '/api/conectores', '/api/proyectos', '/api/github', '/api/instrucciones', '/api/archivos', '/api/credenciales', '/api/sesiones', '/api/entorno', '/api/bitacora', '/api/memoria', '/api/paquetes', '/api/motores', '/api/disco', '/api/actividad'];

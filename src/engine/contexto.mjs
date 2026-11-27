@@ -51,7 +51,7 @@ export function crearArmador({ db, config, politica, ajustes, memoria, entorno =
     }
     let gateway;
     if (variante === 'tercero') {
-      gateway = ['responder', 'reaccionar', 'guardar_memoria', 'preguntar_al_propietario'];
+      gateway = ['responder', 'no_responder', 'reaccionar', 'guardar_memoria', 'preguntar_al_propietario'];
     } else if (tipo === 'trabajo' || tipo === 'sesion') {
       // Un trabajo (o una sesión de proyecto) no le escribe a nadie: devuelve su resultado al orquestador.
       gateway = ['guardar_memoria', 'estado_de_trabajo'];

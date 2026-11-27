@@ -14,6 +14,9 @@ con él por WhatsApp.
   [docs/WHATSAPP.md](docs/WHATSAPP.md).
 - **Bandeja en el panel**: todas las conversaciones como en WhatsApp, con fotos, audios, videos y PDF a la vista,
   reacciones, mensajes editados o borrados, y cualquier otro archivo para descargar.
+- **Ver al agente** (panel, solo el Propietario): qué hizo en cada turno, en palabras simples ("Recibió un mensaje de
+  Ana, ejecutó 2 comandos y respondió"), cada paso al desplegarlo, por qué no respondió algo y qué mensajes no le
+  llegaron, más el estado del entorno. Los secretos se tachan antes de guardar.
 - **Rutinas que se editan conversando** (horario, destino, con qué permisos corren) y conectores de **solo
   lectura** que no piden aprobación por cada consulta. Ver [docs/RUTINAS.md](docs/RUTINAS.md).
 - **Cuida su disco**: limpia solo lo que ya cumplió su función (trabajos terminados, adjuntos viejos, temporales),

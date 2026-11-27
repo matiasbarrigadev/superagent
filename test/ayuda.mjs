@@ -48,9 +48,14 @@ export function claudeFalso(nucleoRef, guion = () => []) {
     const registro = { spec, ctx, args: argumentos(spec, { sesion, nueva }), sesion, nueva, resultados: [] };
     if (spec.preparar) await spec.preparar({ ...spec.rutas, usuario: ctx.usuario });
     corridas.push(registro);
+    // Como el lector de un motor de verdad: cada llamada y su resultado son pasos ("Ver al agente").
+    let n = 0;
     const llamar = async (herramienta, args = {}) => {
+      const ref = `t${++n}`;
+      spec.alPaso?.({ tipo: 'herramienta', nombre: `mcp__superagent__${herramienta}`, entrada: args, ref });
       const r = await nucleoRef.n.mcp.llamar(ctx, herramienta, args);
       registro.resultados.push({ herramienta, r });
+      spec.alPaso?.({ tipo: 'resultado', ref, salida: typeof r === 'string' ? r : JSON.stringify(r) });
       return r;
     };
     const plan = await guion(spec, ctx, llamar);

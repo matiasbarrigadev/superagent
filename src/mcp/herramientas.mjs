@@ -1198,6 +1198,15 @@ Las charlas que cambian de motor arrancan una conversación nueva (con la memori
       },
     },
 
+    no_responder: {
+      descripcion: 'Cuando decidís no responder lo que llegó (no te habla a vos, no aporta, ya se resolvió, es un aviso automático…), dejá el motivo en una línea. No le llega a nadie por WhatsApp: el Propietario lo ve en el panel ("Ver al agente") para entender por qué no contestaste.',
+      esquema: { type: 'object', properties: { motivo: { type: 'string', description: 'Por qué no respondés, en una línea.' } }, required: ['motivo'] },
+      ejecutar(ctx, { motivo }) {
+        ctx.noResponde = String(motivo ?? '').trim().slice(0, 300) || 'sin motivo';
+        return 'Anotado. No respondas nada.';
+      },
+    },
+
     esperar_autorizacion: {
       descripcion: 'Solo el Propietario, en su charla. Cuando le pasás un link o un código para autorizar algo (gh auth login, vercel login, supabase login, un OAuth, una clave que va a dejar en un archivo…), dejá dicho cómo comprobar que ya quedó y terminá tu turno: el gateway lo comprueba solo cada 10 s en tu entorno y te despierta en esta charla con "[autorización X lista]" o "[autorización X sin completar]". No te quedes esperando ni le preguntes "¿ya está?". "esperar" crea o reemplaza la espera de ese servicio; "ver" lista las que hay; "cancelar" saca una.',
       esquema: {

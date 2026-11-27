@@ -92,7 +92,8 @@ export function crearAdaptadorClaude({ cuenta, credencial = 'suscripcion' }) {
     },
     lector() {
       return {
-        linea(linea, r) {
+        pasosPropios: true,
+        linea(linea, r, emitir = () => {}) {
           let m;
           try { m = JSON.parse(linea); } catch { return; }
           if (m.type === 'system' && m.subtype === 'init') r.sessionId = m.session_id ?? r.sessionId;
@@ -101,7 +102,17 @@ export function crearAdaptadorClaude({ cuenta, credencial = 'suscripcion' }) {
             // Tamaño del contexto: lo que entró en el último pedido al modelo (con lo cacheado).
             const u = m.message?.usage;
             if (u) r.contexto = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-            for (const b of m.message?.content ?? []) if (b.type === 'tool_use') r.herramientas.push(b.name);
+            for (const b of m.message?.content ?? []) {
+              if (b.type === 'tool_use') { r.herramientas.push(b.name); emitir({ tipo: 'herramienta', nombre: b.name, entrada: b.input, ref: b.id }); }
+              if (b.type === 'text') emitir({ tipo: 'texto', texto: b.text });
+            }
+          }
+          if (m.type === 'user') {
+            for (const b of Array.isArray(m.message?.content) ? m.message.content : []) {
+              if (b.type !== 'tool_result') continue;
+              const salida = Array.isArray(b.content) ? b.content.map((c) => (c.type === 'text' ? c.text : `[${c.type}]`)).join('\n') : String(b.content ?? '');
+              emitir({ tipo: 'resultado', ref: b.tool_use_id, salida, error: !!b.is_error });
+            }
           }
           if (m.type === 'result') {
             r.sessionId = m.session_id ?? r.sessionId;

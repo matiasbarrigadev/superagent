@@ -48,6 +48,7 @@ import { crearPublicador } from './codigo/publicar.mjs';
 import { crearProcedimientos } from './codigo/procedimiento.mjs';
 import { crearSesiones } from './codigo/sesiones.mjs';
 import { crearEsperas } from './servicios/esperas.mjs';
+import { crearActividad } from './servicios/actividad.mjs';
 
 export function crearNucleo({ correrEsperas = undefined, dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
   const ajustes = crearAjustes(db);
@@ -227,7 +228,8 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
   const mcp = crearServidorMcp({ herramientas, version, log });
   const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, rutinas, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
-  const motor = crearMotor({ db, config,
+  const actividad = crearActividad({ db, entorno, reloj, log });
+  const motor = crearMotor({ db, config, actividad,
     // Una rutina que falla por algo técnico: el agente se lo cuenta a los Propietarios.
     alFallaRutina: ({ rutina, error }) => despertarPropietarios({ origen: `rutina:${rutina.id}`, texto: `[rutina R-${rutina.id} falló] ${nombreDe(rutina.creada_por)} la había pedido ("${String(rutina.instruccion).slice(0, 200)}"). Error: ${String(error ?? '').slice(0, 300)}` }), ajustes, politica, armador, ejecutar: ej, motores, mcp, salida, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, sesiones, waha: waRuteado, consumo, preguntar: cuentaClaude?.preguntar ? (o) => cuentaClaude.preguntar(o) : null, reloj, log });
   ref.motor = motor;
@@ -304,7 +306,7 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas, esperas,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas, esperas, actividad,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

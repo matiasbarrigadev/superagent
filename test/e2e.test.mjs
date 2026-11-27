@@ -41,7 +41,7 @@ test('un mensaje real de punta a punta, con el binario lanzado y el MCP por HTTP
     const tercero = waha.enviados.find((e) => e.chatId === '5491199999999@c.us');
     assert.match(colab.texto, /^eco: Colab \(Colaborador\): ¿me ayudás con el informe\?/);
     assert.match(colab.texto, /delegar_trabajo/);
-    assert.match(tercero.texto, /herramientas: responder,reaccionar,guardar_memoria,preguntar_al_propietario$/);
+    assert.match(tercero.texto, /herramientas: responder,no_responder,reaccionar,guardar_memoria,preguntar_al_propietario$/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM corridas WHERE estado = 'ok'").get().n, 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sesiones_claude').get().n, 2);
     // Cada conversación tuvo su usuario y su carpeta; el archivo del MCP (con el token) se borró al terminar.
