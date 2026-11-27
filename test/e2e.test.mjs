@@ -26,7 +26,7 @@ test('un mensaje real de punta a punta, con el binario lanzado y el MCP por HTTP
   let tiempo = Date.now();
   const config = { dataDir, mcpUrl: null };
   const aislamiento = crearAislamiento({ db, config, log: silencio });
-  const nucleo = crearNucleo({ db, config, waha, aislamiento, ejecutar: crearEjecutor({ cuenta, aislamiento, log: silencio }), reloj: () => tiempo, log: silencio });
+  const nucleo = crearNucleo({ db, config, waha, aislamiento, ejecutar: crearEjecutor({ cuenta, aislamiento, log: silencio }), reloj: () => tiempo, log: silencio, dormir: async () => {} });
   const srv = await new Promise((resolve) => { const s = serve({ fetch: nucleo.mcp.app.fetch, port: 0, hostname: '127.0.0.1' }, (info) => resolve({ s, port: info.port })); });
   config.mcpUrl = `http://127.0.0.1:${srv.port}/mcp`;
   try {

@@ -292,12 +292,12 @@ export function crearMotor({
     const token = mcp.registrar(ctx);
     spec.mcp = { url: config.mcpUrl ?? 'http://127.0.0.1:8081/mcp', token };
 
+    // Como una persona: marca leído y empieza a escribir. No se refresca: si el trabajo tarda, el "escribiendo…" se
+    // apaga solo (WhatsApp lo corta a los segundos) y vuelve justo antes de cada mensaje (lo hace la salida). Un
+    // "escribiendo…" de minutos, o contestar sin leer, son señales de un bot.
     const conEscribiendo = tipo === 'orquestador' && spec.canal === 'whatsapp' && waha?.escribiendo && mensajes.some((m) => m.tipo !== 'evento');
-    let refresco = null;
     if (conEscribiendo) {
-      waha.escribiendo(chatId, true);
-      refresco = setInterval(() => waha.escribiendo(chatId, true), 20_000);
-      refresco.unref?.();
+      Promise.resolve(waha.visto?.(chatId)).catch(() => {}).finally(() => waha.escribiendo(chatId, true));
     }
     const timeoutMs = tipo === 'trabajo' || tipo === 'sesion' ? 60 * 60_000 : 15 * 60_000;
     let r;
@@ -329,7 +329,6 @@ export function crearMotor({
       r = { ok: false, tipoError: 'otro', error: e.message, herramientas: [] };
     } finally {
       mcp.liberar(token);
-      if (refresco) clearInterval(refresco);
       if (conEscribiendo && !ctx.respondio) waha.escribiendo(chatId, false);
     }
 

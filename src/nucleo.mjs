@@ -48,7 +48,7 @@ import { crearPublicador } from './codigo/publicar.mjs';
 import { crearProcedimientos } from './codigo/procedimiento.mjs';
 import { crearSesiones } from './codigo/sesiones.mjs';
 
-export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
+export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
   const ajustes = crearAjustes(db);
   // Primera vez: la zona horaria sale de TZ del contenedor (la del template), si nadie la eligió todavía.
   const tz = process.env.TZ;
@@ -66,7 +66,7 @@ export function crearNucleo({ correrPasos = undefined, fetchVerificacion = undef
   const archivos = crearArchivos({ db, config, reloj });
   // Números de WhatsApp (sesiones de WAHA) con su política; el principal es `waha`.
   const numeros = crearNumeros({ db, principal: waha, nombrePrincipal: config.waha?.session ?? 'default', crearCliente: crearClienteWa, bitacora, reloj, log });
-  const salida = crearSalida({ db, waha, numeros, ajustes, archivos, reloj, log });
+  const salida = crearSalida({ db, waha, numeros, ajustes, archivos, dormir, reloj, log });
   // "Escribiendo…" por el número que corresponde al chat (y solo si ese número puede enviar ahí).
   const waRuteado = {
     ...waha,

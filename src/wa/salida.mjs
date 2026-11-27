@@ -32,7 +32,13 @@ function comoTexto(tipo, d, arch) {
   return `(${tipo})`;
 }
 
-export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null, reloj = () => Date.now(), log = console }) {
+/** Cuánto tarda una persona en tipear un texto: ~30 ms por letra, entre 1 y 4 segundos, con algo de azar. */
+export function tiempoDeEscritura(texto, azar = Math.random) {
+  const base = Math.min(4000, Math.max(1000, 600 + String(texto ?? '').length * 30));
+  return Math.round(base * (0.8 + azar() * 0.4));
+}
+
+export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null, dormir = (ms) => new Promise((r) => setTimeout(r, ms)), reloj = () => Date.now(), log = console }) {
   const ins = db.prepare(`INSERT INTO salida (chat_id, tipo, contenido, responde_a, contacto_nuevo, estado, no_antes_de, corrida_id, origen, creado, sesion)
     VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`);
   const insPanel = db.prepare(`INSERT INTO mensajes (session, id, chat_id, from_me, tipo, cuerpo, ts, procesado, recibido, canal)
@@ -106,6 +112,11 @@ export function crearSalida({ db, waha, numeros = null, ajustes, archivos = null
           if (esPanel(f.chat_id)) {
             insPanel.run(`panel-${f.id}`, f.chat_id, f.tipo === 'texto' ? f.contenido : comoTexto(f.tipo, d, arch), Math.floor(ahora / 1000), ahora);
           } else if (f.tipo === 'texto') {
+            // "Escribiendo…" un rato acorde al largo, y recién ahí el mensaje (lo que recomienda WAHA para no parecer un bot).
+            if (cliente.escribiendo && ajustes?.bool('escritura_humana', true)) {
+              await cliente.escribiendo(f.chat_id, true);
+              await dormir(tiempoDeEscritura(f.contenido));
+            }
             wahaId = await cliente.enviarTexto(f.chat_id, f.contenido, { responderA: f.responde_a, menciones: d?.menciones ?? menciones(f) });
           } else if (f.tipo === 'archivo') {
             wahaId = await cliente.enviarArchivo(f.chat_id, archivo, { epigrafe: d.epigrafe });

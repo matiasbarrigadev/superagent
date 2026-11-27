@@ -22,7 +22,8 @@ quien la pidió. Lo que manda lo lee esa persona: la instrucción tiene que deja
 "solo cantidades, sin montos").
 
 Por WhatsApp, el agente explica el cambio y lo aplica recién cuando el Propietario lo confirma en otro mensaje.
-Borrar una rutina también se confirma.
+Si propone varios cambios juntos, un solo "sí" los confirma todos. Borrar una rutina se lo pregunta el agente antes,
+como cualquier cosa que no se puede deshacer.
 
 ## Aprobaciones
 

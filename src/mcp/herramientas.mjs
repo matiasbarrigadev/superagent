@@ -656,7 +656,7 @@ export function crearHerramientas({ db, disco = null, rutinas = null, motores = 
     },
 
     rutinas: {
-      descripcion: 'Solo el Propietario, en su charla: las rutinas que ya existen. "listar" las muestra con su estado, quién la pidió, con qué permisos corre y a quién le llega. "cambiar" edita una rutina (instrucción, horario, destino, pausar o reactivar, o que corra con tus permisos); "borrar" la quita. No crees una copia para cambiar algo: editá la que existe. Que corra con los permisos del Propietario (corre_como) y borrar se aplican recién cuando confirma en otro mensaje; lo demás, cuando te lo pide.',
+      descripcion: 'Solo el Propietario, en su charla: las rutinas que ya existen. "listar" las muestra con su estado, quién la pidió, con qué permisos corre y a quién le llega. "cambiar" edita una rutina (instrucción, horario, destino, pausar o reactivar, o que corra con tus permisos); "borrar" la quita. No crees una copia para cambiar algo: editá la que existe. Que corra con los permisos del Propietario (corre_como: propietario) se aplica recién cuando confirma en otro mensaje: llamá primero sin confirmado (te devuelve qué decirle) y, si le vas a proponer varios cambios juntos, hacé esa llamada para cada uno antes de preguntarle, así un solo "sí" los confirma todos. Lo demás (incluido borrar), cuando te lo pide.',
       esquema: {
         type: 'object',
         properties: {
@@ -669,7 +669,7 @@ export function crearHerramientas({ db, disco = null, rutinas = null, motores = 
           destinos: { type: 'array', items: { type: 'string' }, description: 'Todos los chats a los que puede escribir (reemplaza la lista; el destino siempre queda).' },
           activa: { type: 'boolean', description: 'false = pausar; true = reactivar.' },
           corre_como: { type: 'string', enum: ['propietario', 'quien_la_pidio'], description: '"propietario": corre con tus permisos (conectores y lo que escribe, sin pedir aprobación cada vez) aunque la haya pedido otra persona; lo que mande lo lee el destino. "quien_la_pidio": vuelve a los permisos de quien la pidió.' },
-          confirmado: { type: 'boolean', description: 'corre_como y borrar: true solo cuando el Propietario lo confirmó en un mensaje nuevo.' },
+          confirmado: { type: 'boolean', description: 'corre_como: propietario: true solo cuando el Propietario lo confirmó en un mensaje nuevo.' },
         },
         required: ['accion'],
       },
@@ -682,16 +682,14 @@ export function crearHerramientas({ db, disco = null, rutinas = null, motores = 
         const r = rutinas.obtener(id);
         if (!r) throw new ErrorHerramienta(`No existe la rutina ${id ?? ''}. Mirá las que hay con listar.`);
         const quien = { actorId: ctx.personaId, donde: 'charla', chatId: ctx.chatId };
-        // Correr con los permisos del Propietario o borrar: primero se lo contás y lo confirma en otro mensaje.
-        const delicado = accion === 'borrar' || cambios.corre_como === 'propietario';
+        // Correr con los permisos del Propietario es darle autoridad: primero se lo contás y lo confirma en otro mensaje.
+        const delicado = accion === 'cambiar' && cambios.corre_como === 'propietario';
         if (delicado) {
           const clave = `rutina|${ctx.personaId}|${r.id}|${accion}|${cambios.corre_como ?? ''}`;
           const previa = fichasMostradas.get(clave);
           if (!confirmado || !previa) {
             fichasMostradas.set(clave, { corridaId: ctx.corridaId, ts: reloj() });
-            const aviso = accion === 'borrar'
-              ? `Se borra R-${r.id}: deja de correr para siempre.`
-              : `R-${r.id} va a correr con tus permisos: usa tus conectores y lo que escribe sin pedir aprobación cada vez, aunque la haya pedido otra persona. Lo que mande lo lee ${rutinas.nombreChat(r.chat_destino)}, así que la instrucción tiene que dejar claro qué puede ver (por ejemplo, solo cantidades).`;
+            const aviso = `R-${r.id} va a correr con tus permisos: usa tus conectores y lo que escribe sin pedir aprobación cada vez, aunque la haya pedido otra persona. Lo que mande lo lee ${rutinas.nombreChat(r.chat_destino)}, así que la instrucción tiene que dejar claro qué puede ver (por ejemplo, solo cantidades).`;
             return `Todavía no se cambió nada. Así está:\n${rutinas.describir(r)}\n${aviso}\nContáselo al Propietario en palabras simples y preguntale si lo confirma. Cuando te diga que sí en un mensaje nuevo, repetí esta llamada con confirmado: true.`;
           }
           if (previa.corridaId === ctx.corridaId) throw new ErrorHerramienta('El Propietario todavía no lo confirmó: contáselo y esperá su respuesta.');
