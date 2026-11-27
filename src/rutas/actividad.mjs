@@ -1,5 +1,6 @@
 // "Ver al agente" (solo el Propietario): qué hizo en cada turno, qué mensajes no le pasaron y por qué, y en qué
 // estado está todo. Los pasos ya se guardan tachados (servicios/actividad.mjs); acá solo se arman para mostrar.
+import { streamSSE } from 'hono/streaming';
 import { resumirTurno } from '../servicios/actividad.mjs';
 
 const MOTIVOS = {
@@ -90,6 +91,26 @@ export function montarActividad(app, { db, nucleo }) {
   app.get('/api/actividad/chats', (c) => c.json({
     chats: db.prepare(`SELECT chat_id AS id, MAX(inicio) AS ultimo, COUNT(*) AS turnos FROM corridas WHERE chat_id IS NOT NULL
         GROUP BY chat_id ORDER BY ultimo DESC LIMIT 60`).all().map((x) => ({ ...x, nombre: nombreChat(chatDe(x.id), x.id) })),
+  }));
+
+  // En vivo: cada paso (ya tachado) y cada turno que empieza o termina, apenas pasa.
+  app.get('/api/actividad/vivo', (c) => streamSSE(c, async (s) => {
+    const cola = [];
+    let despertar = null;
+    const fuera = nucleo.actividad.escuchar((e) => { cola.push(e); despertar?.(); });
+    s.onAbort(() => { fuera(); despertar?.(); });
+    try {
+      await s.writeSSE({ event: 'listo', data: '{}' });
+      while (!s.aborted && !s.closed) {
+        while (cola.length) { const e = cola.shift(); await s.writeSSE({ event: e.evento, data: JSON.stringify(e) }); }
+        // Espera algo nuevo o, cada 25 s, un latido para que ningún proxy corte la conexión.
+        await new Promise((r) => { despertar = r; setTimeout(r, 25_000).unref?.(); });
+        despertar = null;
+        if (!cola.length && !s.aborted) await s.writeSSE({ event: 'latido', data: '{}' });
+      }
+    } finally {
+      fuera();
+    }
   }));
 
   // Estado del entorno, en una franja: qué está haciendo ahora y cómo están las piezas.

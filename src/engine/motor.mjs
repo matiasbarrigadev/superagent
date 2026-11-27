@@ -283,6 +283,7 @@ export function crearMotor({
         trabajo?.id ?? null, reloj(), spec.canal, origen, spec.clienteId, JSON.stringify({ claude: spec.herramientasClaude, gateway: spec.herramientasGateway }))
       .lastInsertRowid);
     for (const s of seqs) db.prepare('UPDATE mensajes SET corrida_id = ? WHERE seq = ?').run(corridaId, s);
+    actividad?.turno('inicio', corridaId);
 
     const ctx = {
       corridaId, tipo, variante: spec.variante, completo: !!spec.completo, chatId, canal: spec.canal, personaId,
@@ -348,6 +349,7 @@ export function crearMotor({
     // El chat del Propietario donde se trabajó último: ahí lo despiertan los avisos de su entorno.
     if (spec.completo && chatId) { ajustes.set('propietario_ultimo_chat', chatId); ajustes.set('propietario_persona', String(personaId ?? '')); }
     if (consumo && r.uso) consumo.revisar().catch(() => {});
+    actividad?.turno('fin', corridaId);
     try { actividad?.podar(); } catch {}
     auditar(db, `corrida.${tipo}`, { actor: String(ctx.personaOrigen ?? ''), rol: spec.rol.nombre, decision: r.ok ? 'ok' : r.tipoError, detalle: { corridaId, llamadas: ctx.llamadas.map((l) => l.nombre), herramientas: r.herramientas } });
 

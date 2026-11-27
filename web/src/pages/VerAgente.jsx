@@ -1,7 +1,7 @@
 // "Ver al agente": qué está haciendo y qué hizo, como una conversación y no como una terminal. Cada turno se resume en
 // una línea ("Recibió un mensaje de Ana, ejecutó 2 comandos y respondió") que se despliega en sus pasos. También los
 // mensajes que el agente no recibió y por qué, y el estado del entorno. "Hablar con el agente" queda como pestaña.
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useDatos } from '../hooks.js';
 import { Aviso, Chip, Girando, fechaCorta } from '../components/ui.jsx';
@@ -11,6 +11,34 @@ const cx = (...c) => c.filter(Boolean).join(' ');
 const hora = (ms) => (ms ? new Date(ms).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '');
 const dia = (ms) => { const t = new Date(ms).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const duracion = (ms) => (ms == null ? '' : ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`);
+
+// En vivo: una sola conexión (EventSource) por pantalla; cada pieza se suscribe a lo que le importa.
+const Vivo = createContext({ conectado: false, suscribir: () => () => {} });
+
+function useVivoProveedor() {
+  const oyentes = useRef(new Set());
+  const [conectado, setConectado] = useState(false);
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return undefined;
+    const es = new EventSource('/api/actividad/vivo');
+    const pasar = (ev) => { let d; try { d = JSON.parse(ev.data); } catch { return; } for (const f of oyentes.current) f(d); };
+    es.addEventListener('listo', () => setConectado(true));
+    es.addEventListener('paso', pasar);
+    es.addEventListener('turno', pasar);
+    es.onerror = () => setConectado(false); // el navegador reintenta solo
+    return () => es.close();
+  }, []);
+  const suscribir = useRef((f) => { oyentes.current.add(f); return () => oyentes.current.delete(f); }).current;
+  return { conectado, suscribir };
+}
+
+/** Escucha los eventos en vivo mientras el componente está montado. */
+function useEventos(f) {
+  const { suscribir } = useContext(Vivo);
+  const ref = useRef(f);
+  ref.current = f;
+  useEffect(() => suscribir((e) => ref.current(e)), [suscribir]);
+}
 
 function Flecha({ abierta }) {
   return (
@@ -52,13 +80,23 @@ function Paso({ paso, resultado }) {
 function DetalleTurno({ id, enCurso }) {
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
+  const { conectado } = useContext(Vivo);
+  const recargar = useRef(() => {});
   useEffect(() => {
     let vivo = true;
     const traer = () => api(`/api/actividad/turnos/${id}`).then((x) => vivo && setD(x)).catch((e) => vivo && setError(e.message));
+    recargar.current = traer;
     traer();
-    const t = enCurso ? setInterval(traer, 2000) : null;
+    // Sin conexión en vivo, se pregunta seguido mientras trabaja.
+    const t = enCurso && !conectado ? setInterval(traer, 2000) : null;
     return () => { vivo = false; if (t) clearInterval(t); };
-  }, [id, enCurso]);
+  }, [id, enCurso, conectado]);
+  // En vivo: cada paso nuevo de este turno se suma apenas pasa.
+  useEventos((e) => {
+    if (e.corrida_id !== id) return;
+    if (e.evento === 'paso') setD((x) => (x && !x.pasos.some((p) => p.id === e.id) ? { ...x, pasos: [...x.pasos, e] } : x));
+    if (e.evento === 'turno' && e.tipo === 'fin') recargar.current();
+  });
   if (error) return <p className="px-1 py-2 text-sm text-red-700 dark:text-red-400">{error}</p>;
   if (!d) return <div className="py-3 text-stone-400"><Girando /></div>;
   const resultados = new Map(d.pasos.filter((p) => p.tipo === 'resultado' && p.ref).map((p) => [p.ref, p]));
@@ -131,12 +169,15 @@ function Descarte({ d }) {
 
 /** Franja de estado: qué hace ahora y cómo están WhatsApp, el motor y el disco. */
 function Estado() {
-  const { datos: e } = useDatos('/api/actividad/estado', { cada: 5000 });
+  const { conectado } = useContext(Vivo);
+  const { datos: e, cargar } = useDatos('/api/actividad/estado', { cada: conectado ? 30000 : 5000 });
+  useEventos((x) => { if (x.evento === 'turno') cargar(); });
   const { datos: wa } = useDatos('/api/whatsapp/numeros', { cada: 20000 });
   if (!e) return null;
   const nums = wa?.numeros ?? [];
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-200 bg-stone-50 px-4 py-2 text-xs dark:border-stone-800 dark:bg-stone-950/40">
+      <span className={cx('mr-1 size-2 rounded-full', conectado ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-600')} title={conectado ? 'En vivo' : 'Actualizando cada pocos segundos'} aria-label={conectado ? 'En vivo' : 'Sin conexión en vivo'} />
       {e.pausada ? <Chip tono="ambar">en pausa</Chip> : e.enCurso.length ? <Chip tono="verde">trabajando: {e.enCurso.length === 1 ? (e.enCurso[0].chat ?? 'un turno') : `${e.enCurso.length} turnos`}</Chip> : <Chip>en reposo</Chip>}
       {nums.map((n) => (
         <Chip key={n.nombre} tono={n.estado === 'WORKING' ? 'verde' : n.estado === 'SCAN_QR_CODE' ? 'ambar' : 'rojo'} title={n.numero ? `+${n.numero}` : n.nombre}>
@@ -160,6 +201,9 @@ function Actividad() {
   const [cargandoMas, setCargandoMas] = useState(false);
   const { datos: chats } = useDatos('/api/actividad/chats', { cada: 30000 });
   const extra = useRef([]); // lo cargado con "ver más" (no se pisa con el refresco)
+  const { conectado } = useContext(Vivo);
+  const traerYa = useRef(() => {});
+  useEventos((e) => { if (e.evento === 'turno') traerYa.current(); });
 
   useEffect(() => {
     let vivo = true;
@@ -175,10 +219,11 @@ function Actividad() {
         setError(null);
       } catch (e) { if (vivo) setError(e.message); }
     };
+    traerYa.current = traer;
     traer();
-    const t = setInterval(traer, 4000);
+    const t = setInterval(traer, conectado ? 30000 : 4000);
     return () => { vivo = false; clearInterval(t); };
-  }, [chat]);
+  }, [chat, conectado]);
 
   async function verMas() {
     if (!mas) return;
@@ -234,7 +279,9 @@ function Actividad() {
 
 export default function VerAgente() {
   const [pestana, setPestana] = useState('actividad');
+  const vivo = useVivoProveedor();
   return (
+    <Vivo.Provider value={vivo}>
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-stone-900">
       <div className="flex items-center gap-1 border-b border-stone-200 px-3 pt-2 dark:border-stone-800" role="tablist">
         {[['actividad', 'Actividad'], ['hablar', 'Hablar con el agente']].map(([id, nombre]) => (
@@ -246,5 +293,6 @@ export default function VerAgente() {
       </div>
       {pestana === 'actividad' ? <><Estado /><Actividad /></> : <div className="min-h-0 flex-1"><Chat /></div>}
     </div>
+    </Vivo.Provider>
   );
 }

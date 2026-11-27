@@ -123,7 +123,7 @@ export function crearActividad({ db, entorno = null, reloj = () => Date.now(), l
       } else return;
       const id = Number(db.prepare(`INSERT INTO corrida_pasos (corrida_id, ts, tipo, nombre, titulo, categoria, detalle, resumen, error, ref)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(corridaId, ts, fila.tipo, fila.nombre, fila.titulo, fila.categoria, fila.detalle, fila.resumen ?? null, fila.error, fila.ref).lastInsertRowid);
-      for (const f of escuchas) { try { f({ id, corrida_id: corridaId, ts, ...fila }); } catch {} }
+      avisar({ evento: 'paso', id, corrida_id: corridaId, ts, ...fila });
     } catch (e) {
       log.warn?.('[actividad]', e.message);
     }
@@ -140,8 +140,11 @@ export function crearActividad({ db, entorno = null, reloj = () => Date.now(), l
     return db.prepare('SELECT id, ts, tipo, nombre, titulo, categoria, detalle, resumen, error, ref FROM corrida_pasos WHERE corrida_id = ? ORDER BY id').all(corridaId);
   }
 
-  /** Suscribirse a pasos nuevos (para verlo en vivo). Devuelve la función para desuscribirse. */
+  /** Suscribirse a lo que pasa (pasos nuevos, turnos que empiezan o terminan), para verlo en vivo. */
   function escuchar(f) { escuchas.add(f); return () => escuchas.delete(f); }
+  function avisar(e) { for (const f of escuchas) { try { f(e); } catch {} } }
+  /** Un turno empezó o terminó (lo avisa el motor). */
+  function turno(tipo, corridaId) { avisar({ evento: 'turno', tipo, corrida_id: corridaId, ts: reloj() }); }
 
-  return { registrar, pasos, podar, escuchar, describirHerramienta, resumirTurno };
+  return { registrar, pasos, podar, escuchar, turno, describirHerramienta, resumirTurno };
 }

@@ -81,3 +81,32 @@ test('el panel muestra turnos, el motivo de no responder y los mensajes descarta
   assert.ok(Array.isArray(e.json.enCurso));
   t.limpiar();
 });
+
+test('en vivo: el panel recibe cada paso apenas pasa (solo con sesión del Propietario)', async () => {
+  const t = armar();
+  const sin = await t.pedirCrudo('GET', '/api/actividad/vivo');
+  assert.equal(sin.status, 401);
+  await entrarComoPropietario(t);
+  const r = await t.pedirCrudo('GET', '/api/actividad/vivo');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/event-stream/);
+  const lector = r.body.getReader();
+  const dec = new TextDecoder();
+  let texto = '';
+  const leerHasta = async (patron) => {
+    while (!patron.test(texto)) {
+      const { value, done } = await lector.read();
+      if (done) break;
+      texto += dec.decode(value);
+    }
+  };
+  await leerHasta(/event: listo/);
+  const c = Number(t.db.prepare("INSERT INTO corridas (tipo, estado, inicio) VALUES ('orquestador', 'corriendo', 1)").run().lastInsertRowid);
+  t.nucleo.actividad.turno('inicio', c);
+  t.nucleo.actividad.registrar(c, { tipo: 'herramienta', nombre: 'Bash', entrada: { command: 'ls', description: 'Listar' }, ref: 'z' });
+  await leerHasta(/event: paso/);
+  assert.match(texto, /event: turno/);
+  assert.match(texto, /Ejecutó un comando: Listar/);
+  await lector.cancel();
+  t.limpiar();
+});
