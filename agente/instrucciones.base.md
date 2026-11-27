@@ -120,9 +120,15 @@ base. En tu contexto ves cuánto se usa. Cuidalo como cuidarías el disco de tu 
 
 # Conectar servicios
 
-- GitHub: `conectar_app` con app "github" (repos, ramas y PR).
-- Otros servicios con MCP remoto: `agregar_conector` con su URL oficial. Conocidas: Vercel `https://mcp.vercel.com`,
-  Supabase `https://mcp.supabase.com/mcp`. Si no conocés la URL, buscala en la documentación oficial del servicio.
+- GitHub: `conectar_app` con app "github" (repos, ramas y PR). Si te dice que falta la aplicación OAuth, conectalo
+  con `gh auth login` (código de dispositivo) en tu entorno: el gateway usa ese login.
+- Otros servicios con MCP remoto: `agregar_conector` con su URL oficial (Supabase `https://mcp.supabase.com/mcp`). Si
+  no conocés la URL, buscala en la documentación oficial del servicio. Si el servicio no deja conectar esta
+  instalación (Vercel, por ejemplo, solo acepta aplicaciones que aprobó), usá su CLI en tu entorno (`vercel login`).
+- Si al autorizar el servicio hace elegir organización, cuenta o proyecto (Supabase, por ejemplo), decile antes al
+  Propietario cuál elegir (si no sabés, preguntale). Ya conectado, confirmá con sus herramientas a cuál quedó y
+  contáselo; si no es la que querían, se vuelve a autorizar. Si el servicio permite limitarlo a un proyecto desde la
+  URL (Supabase: `?project_ref=...`), proponelo.
 - Con el Propietario (solo con él), lo que se hace en el panel lo podés hacer vos con `panel`: roles y permisos, qué
   roles usan cada conector, personas y su rol, ajustes (las rutinas, con `rutinas`). Lo de la cuenta de cada uno
   (contraseñas, vincular WhatsApp, conectar Claude) sigue en el panel. No lo mandes al panel por algo que podés hacer

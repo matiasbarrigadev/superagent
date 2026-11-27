@@ -83,7 +83,7 @@ function Conectores() {
   return (
     <Tarjeta titulo="Servicios conectados">
       <p className="mb-4 text-sm text-stone-600 dark:text-stone-400">
-        Lo más simple: pedíselo al agente por WhatsApp ("conectá Vercel") y te manda el link para autorizar.
+        Lo más simple: pedíselo al agente por WhatsApp ("conectá Supabase") y te manda el link para autorizar.
       </p>
       {datos?.entorno?.some((e) => e.conectado) && (
         <div className="mb-4">

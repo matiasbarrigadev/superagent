@@ -7,7 +7,10 @@ const b64url = (b) => Buffer.from(b).toString('base64url');
 
 async function json(f, url, opciones = {}) {
   const r = await f(url, { ...opciones, headers: { Accept: 'application/json', ...(opciones.headers ?? {}) }, signal: AbortSignal.timeout(20_000) });
-  if (!r.ok) throw new Error(`${url} respondió ${r.status}`);
+  if (!r.ok) {
+    const cuerpo = await r.json().catch(() => null);
+    throw Object.assign(new Error(`${url} respondió ${r.status}${cuerpo?.error ? ` (${cuerpo.error}${cuerpo.error_description ? `: ${cuerpo.error_description}` : ''})` : ''}`), { status: r.status, codigo: cuerpo?.error ?? null });
+  }
   return r.json();
 }
 
@@ -50,11 +53,19 @@ export async function descubrir(urlMcp, { fetch: f = globalThis.fetch } = {}) {
 /** Registro dinámico como cliente público (PKCE, sin secreto). */
 export async function registrar(meta, { redirectUri, fetch: f = globalThis.fetch }) {
   if (!meta.registration_endpoint) throw new Error('El conector no permite registro automático: hace falta cargar un client_id a mano.');
-  return json(f, meta.registration_endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_name: 'Superagent', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' }),
-  });
+  try {
+    return await json(f, meta.registration_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: 'Superagent', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' }),
+    });
+  } catch (e) {
+    // Algunos servicios (Vercel) solo dejan registrarse a clientes que aprobaron: no es algo que se arregle reintentando.
+    if (e.codigo === 'invalid_redirect_uri' || e.codigo === 'unapproved_client') {
+      throw new Error('Este servicio solo deja conectar a aplicaciones que aprobó, y esta instalación no está entre ellas. Conectalo con su CLI en tu entorno (por ejemplo `vercel login`) o con una clave de API si el servicio la ofrece.');
+    }
+    throw e;
+  }
 }
 
 export function pkce() {

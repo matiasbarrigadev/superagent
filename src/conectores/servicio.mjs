@@ -12,10 +12,10 @@ import { auditar } from '../db/index.mjs';
 const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const slug = (t) => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 20) || 'conector';
 
-// Sugerencias para el panel. Las URLs son las públicas de cada proveedor: verificarlas al conectar.
+// Sugerencias para el panel. Las URLs son las públicas de cada proveedor: verificarlas al conectar. Vercel no está:
+// su MCP solo acepta aplicaciones que aprobó (se conecta con `vercel login` en el entorno del agente).
 export const CATALOGO = [
   { nombre: 'GitHub', url: 'https://api.githubcopilot.com/mcp/', auth: 'oauth' },
-  { nombre: 'Vercel', url: 'https://mcp.vercel.com', auth: 'oauth' },
   { nombre: 'Supabase', url: 'https://mcp.supabase.com/mcp', auth: 'oauth' },
   { nombre: 'Stripe', url: 'https://mcp.stripe.com', auth: 'oauth' },
   { nombre: 'Notion', url: 'https://mcp.notion.com/mcp', auth: 'oauth' },
