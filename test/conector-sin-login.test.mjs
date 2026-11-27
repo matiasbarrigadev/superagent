@@ -50,5 +50,12 @@ test('sin metadatos y la herramienta pide login: no queda "conectado", queda con
   const evt = t.db.prepare("SELECT cuerpo FROM mensajes WHERE tipo = 'evento' AND cuerpo LIKE '[conector Calendario sin autorización real]%'").get();
   assert.ok(evt, 'le llega al agente que no quedó autorizado');
   assert.ok(!t.db.prepare("SELECT 1 FROM mensajes WHERE tipo = 'evento' AND cuerpo LIKE '[conector Calendario conectado]%'").get());
+  // Reautorizar no lo vuelve a marcar "conectado" (antes entraba en un bucle de conectar y caer).
+  const id = t.db.prepare('SELECT id FROM conexiones').get().id;
+  await assert.rejects(t.nucleo.conectores.autorizar(id), /no publica cómo obtenerla/);
+  await assert.rejects(t.nucleo.conectores.autorizar(id), /no publica cómo obtenerla/);
+  await t.avanzar(46_000);
+  assert.equal(t.db.prepare('SELECT estado FROM conexiones').get().estado, 'error');
+  assert.equal(t.db.prepare("SELECT COUNT(*) AS n FROM mensajes WHERE tipo = 'evento' AND cuerpo LIKE '[conector Calendario%'").get().n, 1);
   t.limpiar();
 });

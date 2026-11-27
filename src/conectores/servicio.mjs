@@ -65,7 +65,13 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, alAutor
   async function autorizar(id, { chatAviso = null } = {}) {
     const c = obtener(id);
     const d = await descubrir(c.url_mcp, { fetch: f });
-    if (!d) { await activar(id, { tipo: 'ninguna' }, chatAviso); return null; }
+    if (!d) {
+      // Ya se probó y el servicio pide autorización sin decir cómo: no se vuelve a marcar "conectado" (era un bucle).
+      if (leerCred(c)?.sinOauth) throw new ErrorConexion('Este conector pide autorización pero no publica cómo obtenerla (no tiene OAuth que se pueda descubrir): no se puede conectar con un link. Usá otra vía: un servicio que haga de puente (por ejemplo Composio), su CLI en tu entorno o una clave de API si la ofrece.', 409);
+      await activar(id, { tipo: 'ninguna' }, chatAviso);
+      if (obtener(id).estado === 'error' && leerCred(obtener(id))?.sinOauth) throw new ErrorConexion('Este conector pide autorización pero no publica cómo obtenerla (no tiene OAuth que se pueda descubrir): no se puede conectar con un link. Usá otra vía: un servicio que haga de puente (por ejemplo Composio), su CLI en tu entorno o una clave de API si la ofrece.', 409);
+      return null;
+    }
     const reg = await registrar(d.meta, { redirectUri: redirectUri(), fetch: f });
     const { verificador, desafio } = pkce();
     const estado = crypto.randomBytes(24).toString('base64url');
@@ -96,6 +102,8 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, alAutor
       const p = await probar(id);
       if (p?.sinAutorizar) {
         db.prepare("UPDATE conexiones SET estado = 'error' WHERE id = ?").run(id);
+        // Sin OAuth descubrible: queda marcado para no reintentar en bucle.
+        if (cred.tipo === 'ninguna') guardarCred(id, { tipo: 'ninguna', sinOauth: true });
         avisar(chatAviso, `El conector ${app} no quedó autorizado: al probarlo, el servicio rechazó la autorización.`,
           `[conector ${app} sin autorización real] Respondió la lista de herramientas, pero al probar ${p.herramienta} el servicio rechazó la autorización (${p.error}). Seguramente necesita un login OAuth que no se completó o un cliente OAuth propio del servicio. Contáselo simple y proponé el camino (reautorizar, su CLI o una clave de API).`);
         return;
