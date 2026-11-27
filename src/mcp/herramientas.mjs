@@ -392,7 +392,7 @@ export function crearHerramientas({ db, esperas = null, disco = null, rutinas = 
         try { link = await conectores.autorizar(id, { chatAviso: destino }); } catch (e) {
           return `El conector quedó creado, pero no se pudo iniciar la autorización automática (${e.message}). Si usa una clave, el Propietario la carga en el panel.`;
         }
-        if (!link) return 'Conector agregado: no necesita autorización.';
+        if (!link) return 'Conector agregado sin pedir login. Lo pruebo con una consulta real y te aviso en esta charla si quedó andando o si en realidad necesita autorización.';
         salida.encolar({ chatId: destino, texto: `Para conectar ${texto(nombre, 40)}, abrí este link oficial y autorizá (vence en 30 minutos):\n${link}`, origen: 'conector' });
         despertarSalida();
         return 'Le mandé a la persona el link para autorizar. Cuando lo haga, el conector queda activo.';

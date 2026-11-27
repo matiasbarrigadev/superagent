@@ -78,11 +78,14 @@ async function conConector() {
   const r = await prov.fetchFalso(link);
   const vuelta = new URL(r.headers.get('location'));
   const cb = await t.app.request(`${vuelta.pathname}${vuelta.search}`);
-  return { t, prov, msg, cb };
+  // Antes de darlo por conectado, el gateway lo prueba con una consulta de solo lectura.
+  const prueba = prov.llamadas.splice(0).map((l) => l.name);
+  return { t, prov, msg, cb, prueba };
 }
 
 test('el link de autorización llega por WhatsApp y el token queda cifrado en conexiones', async () => {
-  const { t, msg, cb } = await conConector();
+  const { t, msg, cb, prueba } = await conConector();
+  assert.deepEqual(prueba, ['buscar_eventos']);
   assert.equal(msg.chatId, '5491111111111@c.us');
   assert.match(await cb.text(), /quedó conectado/);
   const c = t.db.prepare('SELECT * FROM conexiones').get();
@@ -95,6 +98,7 @@ test('el link de autorización llega por WhatsApp y el token queda cifrado en co
   assert.equal(evt.chat_id, '5491111111111@c.us');
   assert.ok(evt.persona_id);
   assert.match(evt.cuerpo, /2 herramientas/);
+  assert.match(evt.cuerpo, /probé con buscar_eventos y respondió bien/);
   await t.avanzar(5_000);
   assert.ok(t.corridas.some((c) => c.spec.prompt.includes('[conector Agenda conectado]')), 'el agente se despierta con eso');
   t.limpiar();

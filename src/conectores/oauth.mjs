@@ -19,9 +19,12 @@ export async function descubrir(urlMcp, { fetch: f = globalThis.fetch } = {}) {
   const mcp = new URL(urlMcp);
   // 1) El 401 del MCP puede traer resource_metadata en WWW-Authenticate.
   let metaRecurso = null;
+  let pideAuth = false;
   try {
     const r = await f(urlMcp, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"superagent","version":"1"}}}', signal: AbortSignal.timeout(20_000) });
-    if (r.status !== 401) return null; // no pide autorización
+    // Algunos MCP (Google) contestan initialize sin login y piden autorización recién al usar una herramienta: por eso
+    // un 200 acá no alcanza, también se miran los metadatos del recurso protegido.
+    pideAuth = r.status === 401;
     const m = /resource_metadata="([^"]+)"/.exec(r.headers.get('www-authenticate') ?? '');
     if (m) metaRecurso = await json(f, m[1]).catch(() => null);
   } catch {
@@ -34,6 +37,7 @@ export async function descubrir(urlMcp, { fetch: f = globalThis.fetch } = {}) {
       if (metaRecurso) break;
     }
   }
+  if (!pideAuth && !metaRecurso?.authorization_servers?.length) return null; // no pide autorización
   const emisor = metaRecurso?.authorization_servers?.[0] ?? mcp.origin;
   const e = new URL(emisor);
   let meta = null;
@@ -47,12 +51,13 @@ export async function descubrir(urlMcp, { fetch: f = globalThis.fetch } = {}) {
     const delMcp = await json(f, new URL('/.well-known/oauth-authorization-server', mcp.origin).href).catch(() => null);
     if (delMcp?.registration_endpoint) meta = { ...meta, registration_endpoint: delMcp.registration_endpoint };
   }
-  return { recurso: metaRecurso?.resource ?? urlMcp, meta };
+  // Los permisos (scopes) que pide el MCP, no los genéricos del servidor de autorización (que pueden ser solo openid).
+  return { recurso: metaRecurso?.resource ?? urlMcp, meta, alcances: metaRecurso?.scopes_supported?.length ? metaRecurso.scopes_supported : null };
 }
 
 /** Registro dinámico como cliente público (PKCE, sin secreto). */
 export async function registrar(meta, { redirectUri, fetch: f = globalThis.fetch }) {
-  if (!meta.registration_endpoint) throw new Error('El conector no permite registro automático: hace falta cargar un client_id a mano.');
+  if (!meta.registration_endpoint) throw new Error('Este servicio no deja que esta instalación se registre sola (no tiene registro automático de clientes OAuth): hace falta un cliente OAuth propio del servicio (client_id y secreto), o usar su CLI o una clave de API si la ofrece.');
   try {
     return await json(f, meta.registration_endpoint, {
       method: 'POST',
@@ -83,6 +88,11 @@ export function urlAutorizacion({ meta, clientId, redirectUri, estado, desafio, 
   u.searchParams.set('code_challenge_method', 'S256');
   u.searchParams.set('resource', recurso);
   if (alcance ?? meta.scopes_supported?.length) u.searchParams.set('scope', alcance ?? meta.scopes_supported.join(' '));
+  // Google entrega el token para renovar solo si se pide acceso "offline" y el consentimiento explícito.
+  if (/accounts\.google\.com/.test(String(meta.issuer ?? meta.authorization_endpoint))) {
+    u.searchParams.set('access_type', 'offline');
+    u.searchParams.set('prompt', 'consent');
+  }
   return u.href;
 }
 

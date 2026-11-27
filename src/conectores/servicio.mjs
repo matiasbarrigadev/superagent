@@ -71,7 +71,7 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, alAutor
     const estado = crypto.randomBytes(24).toString('base64url');
     guardarCred(id, { tipo: 'pendiente', verificador, meta: d.meta, clientId: reg.client_id, clientSecret: reg.client_secret ?? null, recurso: d.recurso, chatAviso, vence: reloj() + 30 * 60_000 });
     db.prepare("UPDATE conexiones SET referencia = ?, estado = 'pendiente' WHERE id = ?").run(sha(estado), id);
-    return urlAutorizacion({ meta: d.meta, clientId: reg.client_id, redirectUri: redirectUri(), estado, desafio, recurso: d.recurso });
+    return urlAutorizacion({ meta: d.meta, clientId: reg.client_id, redirectUri: redirectUri(), estado, desafio, recurso: d.recurso, alcance: d.alcances?.join(' ') ?? null });
   }
 
   /** /oauth/callback: canjea el código y deja el conector activo. */
@@ -92,13 +92,40 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, alAutor
     try {
       const n = await actualizarHerramientas(id);
       const app = obtener(id).app;
+      // Antes de darlo por conectado, una llamada de verdad: listar herramientas no prueba que la autorización sirva.
+      const p = await probar(id);
+      if (p?.sinAutorizar) {
+        db.prepare("UPDATE conexiones SET estado = 'error' WHERE id = ?").run(id);
+        avisar(chatAviso, `El conector ${app} no quedó autorizado: al probarlo, el servicio rechazó la autorización.`,
+          `[conector ${app} sin autorización real] Respondió la lista de herramientas, pero al probar ${p.herramienta} el servicio rechazó la autorización (${p.error}). Seguramente necesita un login OAuth que no se completó o un cliente OAuth propio del servicio. Contáselo simple y proponé el camino (reautorizar, su CLI o una clave de API).`);
+        return;
+      }
+      const prueba = p ? (p.ok ? ` Lo probé con ${p.herramienta} y respondió bien.` : ` Al probarlo con ${p.herramienta} dio un error (${p.error}); puede ser de esa consulta, no de la conexión.`) : ' No tiene una consulta de solo lectura para probarlo: confirmalo con la primera que hagas.';
       avisar(chatAviso, `Listo: el conector ${app} quedó conectado (${n} herramientas).`,
-        `[conector ${app} conectado] La autorización se completó: ${n} herramientas listas. Contáselo en una línea y seguí con lo que estaban haciendo (si ya lo diste por conectado, no lo repitas).`);
+        `[conector ${app} conectado] La autorización se completó: ${n} herramientas listas.${prueba} Contáselo en una línea y seguí con lo que estaban haciendo (si ya lo diste por conectado, no lo repitas).`);
     } catch (e) {
       db.prepare("UPDATE conexiones SET estado = 'error' WHERE id = ?").run(id);
       const app = obtener(id).app;
       avisar(chatAviso, `El conector ${app} se autorizó pero no respondió: ${e.message}`,
         `[conector ${app} sin responder] Se autorizó pero el servicio no respondió: ${e.message}. Contáselo simple y ofrecé reintentar.`);
+    }
+  }
+
+  /**
+   * Prueba real: llama a una herramienta de solo lectura sin parámetros obligatorios (listar algo). Devuelve null si
+   * no hay ninguna así, {ok}, {sinAutorizar} o {error}.
+   */
+  async function probar(id) {
+    const c = obtener(id);
+    const candidata = json(c.permisos, []).find((h) => !h.escribe && !(h.esquema?.required ?? []).length);
+    if (!candidata) return null;
+    try {
+      const r = await (await cliente(c)).llamar(candidata.nombre, {});
+      const texto = (r?.content ?? []).map((x) => (x.type === 'text' ? x.text : '')).join(' ');
+      if (r?.isError && /auth|credential|token|unauthori[sz]ed|forbidden|permission denied|login/i.test(texto)) return { herramienta: candidata.nombre, sinAutorizar: true, error: texto.slice(0, 200) };
+      return r?.isError ? { herramienta: candidata.nombre, error: texto.slice(0, 200) || 'error' } : { herramienta: candidata.nombre, ok: true };
+    } catch (e) {
+      return e.sinAutorizar ? { herramienta: candidata.nombre, sinAutorizar: true, error: e.message } : { herramienta: candidata.nombre, error: e.message };
     }
   }
 
