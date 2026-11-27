@@ -89,7 +89,14 @@ test('el link de autorización llega por WhatsApp y el token queda cifrado en co
   assert.equal(c.estado, 'activa', t.waha.enviados.map((e) => e.texto).join(' | '));
   assert.ok(!c.credencial.includes(TOKEN), 'cifrado');
   assert.equal(JSON.parse(c.permisos).length, 2);
-  assert.ok(t.waha.enviados.some((e) => /Agenda quedó conectado \(2 herramientas\)/.test(e.texto)));
+  // El "listo" no sale directo: le llega al agente en el chat donde se pidió, y él sigue la charla sabiéndolo.
+  assert.ok(!t.waha.enviados.some((e) => /quedó conectado/.test(e.texto)));
+  const evt = t.db.prepare("SELECT chat_id, persona_id, cuerpo FROM mensajes WHERE tipo = 'evento' AND cuerpo LIKE '[conector Agenda conectado]%'").get();
+  assert.equal(evt.chat_id, '5491111111111@c.us');
+  assert.ok(evt.persona_id);
+  assert.match(evt.cuerpo, /2 herramientas/);
+  await t.avanzar(5_000);
+  assert.ok(t.corridas.some((c) => c.spec.prompt.includes('[conector Agenda conectado]')), 'el agente se despierta con eso');
   t.limpiar();
 });
 

@@ -7,7 +7,7 @@ export class ErrorGithub extends Error {
   constructor(mensaje, status = 502) { super(mensaje); this.status = status; }
 }
 
-export function crearGithub({ db, config, salida, tokenRespaldo = () => null, fetch: f = globalThis.fetch, reloj = () => Date.now(), esperar = (ms) => new Promise((r) => setTimeout(r, ms)), log = console }) {
+export function crearGithub({ db, config, salida, alAutorizar = null, tokenRespaldo = () => null, fetch: f = globalThis.fetch, reloj = () => Date.now(), esperar = (ms) => new Promise((r) => setTimeout(r, ms)), log = console }) {
   const web = config.github?.web ?? 'https://github.com';
   const api = config.github?.api ?? 'https://api.github.com';
   const clientId = () => config.github?.clientId ?? null;
@@ -28,6 +28,13 @@ export function crearGithub({ db, config, salida, tokenRespaldo = () => null, fe
     if (c) db.prepare("UPDATE conexiones SET credencial = ?, estado = 'activa', conectada_por = ? WHERE id = ?").run(sobre, conectadaPor, c.id);
     else db.prepare("INSERT INTO conexiones (app, alcance, proveedor, credencial, estado, conectada_por) VALUES ('github', 'instalacion', 'directo', ?, 'activa', ?)").run(sobre, conectadaPor);
     auditar(db, 'github.conectar', { actor: String(conectadaPor ?? ''), detalle: { metodo } });
+  }
+
+  // El resultado le llega al agente (que sigue la charla con eso); sin agente, un aviso directo.
+  function avisar(chatId, texto, evento) {
+    if (alAutorizar && alAutorizar({ chatId, texto: evento })) return;
+    salida.encolar({ chatId, texto, origen: 'github' });
+    salida.procesar().catch(() => {});
   }
 
   async function form(url, cuerpo) {
@@ -53,15 +60,13 @@ export function crearGithub({ db, config, salida, tokenRespaldo = () => null, fe
         const t = await form(`${web}/login/oauth/access_token`, { client_id: clientId(), device_code: d.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
         if (t.access_token) {
           guardarToken(t.access_token, { conectadaPor: personaId, metodo: 'dispositivo' });
-          salida.encolar({ chatId, texto: 'Listo: GitHub quedó conectado.', origen: 'github' });
-          salida.procesar().catch(() => {});
+          avisar(chatId, 'Listo: GitHub quedó conectado.', '[GitHub conectado] La autorización se completó. Contáselo en una línea y seguí con lo que estaban haciendo (si ya lo diste por conectado, no lo repitas).');
           return true;
         }
         if (t.error === 'slow_down') intervalo += 5000;
         else if (t.error && t.error !== 'authorization_pending') break;
       }
-      salida.encolar({ chatId, texto: 'No se completó la conexión con GitHub (venció o se rechazó). Podés pedirla de nuevo.', origen: 'github' });
-      salida.procesar().catch(() => {});
+      avisar(chatId, 'No se completó la conexión con GitHub (venció o se rechazó). Podés pedirla de nuevo.', '[GitHub sin conectar] El código venció o se rechazó. Contáselo simple y ofrecé pedirlo de nuevo.');
       return false;
     };
     return { espera: esperarAutorizacion().catch((e) => { log.warn('[github]', e.message); return false; }) };

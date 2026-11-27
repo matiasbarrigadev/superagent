@@ -80,7 +80,7 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
   const consumo = crearConsumo({ db, ajustes, politica, salida, avisos, plan: () => (cuentaClaude?.usoPlan ? cuentaClaude.usoPlan() : null), reloj, log });
   const ais = aislamiento ?? crearAislamiento({ db, config, log });
   const logins = crearLoginsDelEntorno({ aislamiento: ais });
-  const github = crearGithub({ db, config, salida, tokenRespaldo: () => logins.tokenGithub(), ...(fetchGithub ? { fetch: fetchGithub } : {}), reloj, log });
+  const github = crearGithub({ db, config, salida, alAutorizar: (e) => avisarAgente(e), tokenRespaldo: () => logins.tokenGithub(), ...(fetchGithub ? { fetch: fetchGithub } : {}), reloj, log });
   const repos = crearRepos({ db, config, aislamiento: ais, github, ...(gitRepos ? { git: gitRepos } : {}), log });
   const procedimientos = crearProcedimientos({ db, config, aislamiento: ais, repos, ...(correrPasos ? { correr: correrPasos } : {}), ...(fetchVerificacion ? { fetch: fetchVerificacion } : {}), reloj, log });
   const publicador = crearPublicador({ db, repos, github, procedimientos });
@@ -96,6 +96,18 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
     for (const d of duenos) ref.motor.despertar({ chatId: `${d.telefono}@c.us`, personaId: d.id, origen, texto });
     return duenos.length;
   }
+  /**
+   * Algo que terminó fuera de la charla (una autorización por link) le llega al agente en el chat donde se pidió,
+   * para que siga la conversación sabiéndolo. Devuelve false si no hay agente (y entonces va un aviso directo).
+   */
+  function avisarAgente({ chatId, texto }) {
+    if (!ref.motor || !chatId) return false;
+    const tel = String(chatId).split('@')[0];
+    const personaId = chatId.startsWith('panel:') ? Number(chatId.slice(6)) || null
+      : db.prepare('SELECT id FROM personas WHERE telefono = ? AND activa = 1').get(tel)?.id ?? null;
+    ref.motor.despertar({ chatId, personaId, texto, origen: 'autorizacion' });
+    return true;
+  }
   const nombreDe = (id) => { const p = id ? db.prepare('SELECT nombre, telefono FROM personas WHERE id = ?').get(id) : null; return p ? (p.nombre ?? `+${p.telefono}`) : 'alguien'; };
 
   const conectores = crearConectores({ db, config, salida,
@@ -103,7 +115,7 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
     alCaer: (c) => {
       avisos.alPropietario(`El conector ${c.app} perdió la autorización.`, { tipo: 'aviso', whatsapp: false });
       despertarPropietarios({ origen: `conector:${c.id}`, texto: `[conector ${c.app} sin autorización] El conector ${c.app} (id ${c.id}) dejó de aceptar la autorización: sus herramientas no andan hasta reconectarlo. Avisale al Propietario y ofrecele el link (panel POST /api/conectores/${c.id}/autorizar).` });
-    }, ...(fetchConectores ? { fetch: fetchConectores } : {}), reloj, log });
+    }, alAutorizar: (e) => avisarAgente(e), ...(fetchConectores ? { fetch: fetchConectores } : {}), reloj, log });
   const ref = { motor: null, sesiones: null };
   const sesiones = crearSesiones({ db, reloj });
   ref.sesiones = sesiones;

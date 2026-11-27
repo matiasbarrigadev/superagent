@@ -27,7 +27,7 @@ export class ErrorConexion extends Error {
   constructor(mensaje, status = 400) { super(mensaje); this.status = status; }
 }
 
-export function crearConectores({ db, config, salida, alCaer = () => {}, fetch: f = globalThis.fetch, reloj = () => Date.now(), log = console }) {
+export function crearConectores({ db, config, salida, alCaer = () => {}, alAutorizar = null, fetch: f = globalThis.fetch, reloj = () => Date.now(), log = console }) {
   const redirectUri = () => `${config.publicUrl}/oauth/callback`;
   const guardarCred = (id, cred) => db.prepare('UPDATE conexiones SET credencial = ? WHERE id = ?').run(cifrar(config.sessionSecret, JSON.stringify(cred), 'conector'), id);
   const leerCred = (c) => { try { return c.credencial ? JSON.parse(descifrar(config.sessionSecret, c.credencial, 'conector')) : null; } catch { return null; } };
@@ -36,7 +36,13 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, fetch: 
     if (!c) throw new ErrorConexion('Ese conector no existe.', 404);
     return c;
   };
-  const avisar = (chatId, texto) => { if (chatId) { salida.encolar({ chatId, texto, origen: 'conector' }); salida.procesar().catch(() => {}); } };
+  // El resultado de una autorización le llega al agente (que sigue la charla con eso); sin agente, un aviso directo.
+  const avisar = (chatId, texto, evento) => {
+    if (!chatId) return;
+    if (alAutorizar && alAutorizar({ chatId, texto: evento })) return;
+    salida.encolar({ chatId, texto, origen: 'conector' });
+    salida.procesar().catch(() => {});
+  };
 
   function crear({ nombre, url, auth = 'oauth', clave = null, alcance = 'instalacion', personaId = null, creadoPor = null }) {
     let u;
@@ -85,10 +91,14 @@ export function crearConectores({ db, config, salida, alCaer = () => {}, fetch: 
     db.prepare("UPDATE conexiones SET estado = 'activa', referencia = NULL WHERE id = ?").run(id);
     try {
       const n = await actualizarHerramientas(id);
-      avisar(chatAviso, `Listo: el conector ${obtener(id).app} quedó conectado (${n} herramientas).`);
+      const app = obtener(id).app;
+      avisar(chatAviso, `Listo: el conector ${app} quedó conectado (${n} herramientas).`,
+        `[conector ${app} conectado] La autorización se completó: ${n} herramientas listas. Contáselo en una línea y seguí con lo que estaban haciendo (si ya lo diste por conectado, no lo repitas).`);
     } catch (e) {
       db.prepare("UPDATE conexiones SET estado = 'error' WHERE id = ?").run(id);
-      avisar(chatAviso, `El conector ${obtener(id).app} se autorizó pero no respondió: ${e.message}`);
+      const app = obtener(id).app;
+      avisar(chatAviso, `El conector ${app} se autorizó pero no respondió: ${e.message}`,
+        `[conector ${app} sin responder] Se autorizó pero el servicio no respondió: ${e.message}. Contáselo simple y ofrecé reintentar.`);
     }
   }
 
