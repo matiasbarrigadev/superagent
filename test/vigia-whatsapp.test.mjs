@@ -52,3 +52,14 @@ test('vigía: si WAHA no responde, no rompe', async () => {
   const v = crearVigiaWhatsApp({ waha: { estado: async () => { throw new Error('WAHA no responde'); }, asegurar: async () => {} }, log: silencio });
   assert.equal(await v.revisar(), null);
 });
+
+test('vigía de un número borrado: se detiene y no vuelve a crear la sesión en WAHA', async () => {
+  let asegurados = 0;
+  let existe = true;
+  const v = crearVigiaWhatsApp({ waha: { estado: async () => ({ status: 'NO_CREADA' }), asegurar: async () => { asegurados++; } }, existe: () => existe, log: { log() {}, warn() {} } });
+  await v.revisar();
+  assert.equal(asegurados, 1);
+  existe = false;
+  assert.equal(await v.revisar(), null);
+  assert.equal(asegurados, 1, 'no la recrea');
+});

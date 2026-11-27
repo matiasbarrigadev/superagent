@@ -43,9 +43,14 @@ const nucleo = crearNucleo({
 const vigia = crearVigiaWhatsApp({ waha });
 const vigias = new Map([[config.waha.session, vigia]]);
 function vigiaDe(nombre) {
+  // Un número borrado no tiene vigía: si no, lo volvería a crear en WAHA.
+  if (nombre !== config.waha.session && !nucleo.numeros.obtener(nombre)) {
+    vigias.get(nombre)?.detener();
+    vigias.delete(nombre);
+    return null;
+  }
   if (!vigias.has(nombre)) {
-    if (!nucleo.numeros.obtener(nombre)) return null;
-    const v = crearVigiaWhatsApp({ waha: nucleo.numeros.cliente(nombre) });
+    const v = crearVigiaWhatsApp({ waha: nucleo.numeros.cliente(nombre), existe: () => !!nucleo.numeros.obtener(nombre) });
     vigias.set(nombre, v);
     v.iniciar();
   }

@@ -7,11 +7,12 @@
 // - STOPPED / FAILED / NO_CREADA: se arranca de nuevo, con espera creciente para no insistir en loop
 //   (30 s, 1 min, 2 min, 5 min, y después cada 10 min) hasta que vuelva a andar.
 // - Nunca hace logout ni borra nada.
+// - Si el número se borró (existe() da false), se detiene: no vuelve a crear una sesión que ya no se usa.
 
 const ESPERAS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const CAIDA = new Set(['STOPPED', 'FAILED', 'NO_CREADA']);
 
-export function crearVigiaWhatsApp({ waha, reloj = () => Date.now(), log = console, intervalo = 30_000 }) {
+export function crearVigiaWhatsApp({ waha, existe = () => true, reloj = () => Date.now(), log = console, intervalo = 30_000 }) {
   let intentos = 0;
   let proximo = 0;
   let ultimo = null;
@@ -19,6 +20,7 @@ export function crearVigiaWhatsApp({ waha, reloj = () => Date.now(), log = conso
 
   async function revisar() {
     if (ocupado) return null;
+    if (!existe()) { detener(); return null; }
     ocupado = true;
     try {
       const { status } = await waha.estado();
@@ -44,10 +46,11 @@ export function crearVigiaWhatsApp({ waha, reloj = () => Date.now(), log = conso
   }
 
   let t = null;
+  function detener() { clearInterval(t); t = null; }
   return {
     revisar,
     iniciar() { if (!t) { t = setInterval(revisar, intervalo); t.unref?.(); } },
-    detener() { clearInterval(t); t = null; },
+    detener,
     /** Un evento de estado de WAHA: si es una caída, se mira enseguida (sin esperar la vuelta). */
     aviso(status) { if (CAIDA.has(status)) setTimeout(revisar, 2_000).unref?.(); },
   };
