@@ -10,12 +10,24 @@ export class ErrorVerificacion extends Error {
 
 const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 
-export function crearVerificacion({ db, waha, reloj = () => Date.now() }) {
+export function crearVerificacion({ db, waha, numeroVinculado = () => false, alVerificarPorVinculo = () => {}, reloj = () => Date.now() }) {
+  /**
+   * El número del Propietario es el mismo que tiene vinculado el agente: quien escaneó el QR ya tiene ese teléfono,
+   * así que queda verificado sin mandarse un código a sí mismo.
+   */
+  function verificarPorVinculo(personaId, tel) {
+    aplicar({ id: null, telefono: tel }, personaId);
+    auditar(db, 'persona.verificar_por_vinculo', { actor: String(personaId) });
+    try { alVerificarPorVinculo(personaId, tel); } catch {}
+    return { telefono: tel, verificado: true, personal: true };
+  }
+
   async function pedir(personaId, telefono) {
     const tel = soloDigitos(telefono);
     if (tel.length < 8 || tel.length > 15) throw new ErrorVerificacion('Número inválido: escribilo con código de país, solo dígitos.');
     const otra = db.prepare('SELECT id FROM personas WHERE id != ? AND alta_manual = 1 AND activa = 1 AND (telefono = ? OR (length(telefono) >= 10 AND substr(telefono, -10) = substr(?, -10)))').get(personaId, tel, tel);
     if (otra) throw new ErrorVerificacion('Ese número ya es de otra persona dada de alta.', 409);
+    if (numeroVinculado(tel)) return verificarPorVinculo(personaId, tel);
     const codigo = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
     db.prepare('DELETE FROM verificaciones WHERE persona_id = ?').run(personaId);
     db.prepare('INSERT INTO verificaciones (persona_id, telefono, hash, vence) VALUES (?, ?, ?, ?)').run(personaId, tel, sha(codigo), reloj() + 10 * 60_000);
@@ -51,7 +63,8 @@ export function crearVerificacion({ db, waha, reloj = () => Date.now() }) {
         db.prepare('UPDATE personas SET activa = 0, telefono = NULL, lid = NULL WHERE id = ?').run(a.id);
       }
       db.prepare('UPDATE personas SET telefono = ?, verificada = 1, alta_manual = 1 WHERE id = ?').run(v.telefono, personaId);
-      db.prepare('DELETE FROM verificaciones WHERE id = ?').run(v.id);
+      if (v.id) db.prepare('DELETE FROM verificaciones WHERE id = ?').run(v.id);
+      else db.prepare('DELETE FROM verificaciones WHERE persona_id = ?').run(personaId);
       db.exec('COMMIT');
     } catch (e) {
       db.exec('ROLLBACK');
@@ -77,6 +90,7 @@ export function crearVerificacion({ db, waha, reloj = () => Date.now() }) {
   /** Guarda el número y devuelve el código para mostrar en el panel. Si WhatsApp ya está vinculado, saluda. */
   async function pedirPorRespuesta(personaId, telefono, { conectado = false } = {}) {
     const tel = validarTelefono(personaId, telefono);
+    if (numeroVinculado(tel)) return verificarPorVinculo(personaId, tel);
     const codigo = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
     db.prepare('DELETE FROM verificaciones WHERE persona_id = ?').run(personaId);
     const id = Number(db.prepare("INSERT INTO verificaciones (persona_id, telefono, hash, vence, modo) VALUES (?, ?, ?, ?, 'respuesta')")
@@ -96,9 +110,13 @@ export function crearVerificacion({ db, waha, reloj = () => Date.now() }) {
 
   /** Al vincular WhatsApp: saluda a los números cargados que todavía esperan. */
   async function saludarPendientes() {
-    const filas = db.prepare("SELECT id, telefono FROM verificaciones WHERE modo = 'respuesta' AND saludado = 0 AND vence > ?").all(reloj());
+    const filas = db.prepare("SELECT id, persona_id, telefono FROM verificaciones WHERE modo = 'respuesta' AND saludado = 0 AND vence > ?").all(reloj());
     let n = 0;
-    for (const v of filas) if (await saludar(v)) n++;
+    for (const v of filas) {
+      // El número cargado es el mismo que se acaba de vincular: no se saluda a sí mismo, queda verificado.
+      if (numeroVinculado(v.telefono)) { verificarPorVinculo(v.persona_id, v.telefono); n++; continue; }
+      if (await saludar(v)) n++;
+    }
     return n;
   }
 
@@ -128,5 +146,5 @@ export function crearVerificacion({ db, waha, reloj = () => Date.now() }) {
     return v.persona_id;
   }
 
-  return { pedir, confirmar, pedirPorRespuesta, saludarPendientes, pendiente, porRespuesta };
+  return { pedir, confirmar, pedirPorRespuesta, saludarPendientes, pendiente, porRespuesta, verificarPorVinculo };
 }

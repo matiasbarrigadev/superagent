@@ -94,6 +94,14 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
   const evento = db.prepare('INSERT INTO eventos_wa (session, estado, ts) VALUES (?, ?, ?)');
   const qLid = db.prepare('SELECT telefono FROM lids WHERE lid = ?');
   const ponerLid = db.prepare('INSERT OR REPLACE INTO lids (lid, telefono, actualizado) VALUES (?, ?, ?)');
+  // ¿Lo mandó el agente? Por el id que devolvió WAHA o, si el webhook llegó antes de anotarlo, por el texto reciente.
+  const qEnvioPorId = db.prepare("SELECT 1 FROM salida WHERE chat_id = ? AND (waha_id = ? OR waha_id LIKE '%\\_' || ? ESCAPE '\\') LIMIT 1");
+  const qEnvioPorTexto = db.prepare("SELECT 1 FROM salida WHERE chat_id = ? AND contenido = ? AND creado > ? AND estado IN ('pendiente', 'enviado') LIMIT 1");
+  function esEnvioDelAgente(chatId, p) {
+    const id = String(p.id ?? '');
+    if (id && qEnvioPorId.get(chatId, id, id.split('_').at(-1))) return true;
+    return !!(p.body && qEnvioPorTexto.get(chatId, String(p.body), reloj() - 5 * 60_000));
+  }
   const qPropio = db.prepare("SELECT 1 FROM mensajes WHERE from_me = 1 AND (id = ? OR id LIKE '%\\_' || ? ESCAPE '\\') LIMIT 1");
   const dirAdjuntos = config.dataDir ? path.join(config.dataDir, 'adjuntos') : null;
   const dirGrabaciones = config.dataDir ? path.join(config.dataDir, 'grabaciones') : null;
@@ -275,7 +283,7 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
     const sesion = evt.session ?? numeros?.nombrePrincipal ?? 'default';
     const politica = numeros?.politicaDe(sesion) ?? null;
     // En un número donde el agente no escribe, lo que sale "de mí" lo escribió la persona dueña de ese teléfono.
-    let deDueno = false;
+    let deDueno = false, canalDueno = false;
     if (numeros) {
       if (!numeros.enAlcance(sesion, chatId)) { numeros.contarFuera(sesion); return 'fuera_de_alcance'; }
       numeros.verChat(chatId, sesion);
@@ -285,13 +293,21 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
       const nucleoId = idNucleo(p);
       if (nucleoId && db.prepare("SELECT 1 FROM mensajes WHERE chat_id = ? AND session != ? AND (id = ? OR id LIKE '%' || ? || '%') LIMIT 1").get(chatId, sesion, String(p.id), nucleoId)) return 'duplicado';
       if (!politica.guardar) return 'sin_guardar';
-      if (fromMe && politica.modo !== 'responder') {
+      // Número personal del Propietario: lo que sale del teléfono y no lo mandó el agente lo escribió él.
+      const personal = politica.personal_de ?? null;
+      const delAgente = fromMe && esEnvioDelAgente(chatId, p);
+      if (fromMe && personal && !delAgente && !grupo && chatId === numeros.chatPropio(sesion)) {
+        // "Mensaje a ti mismo": le habla al agente.
+        canalDueno = true;
+        personaId = personal;
+        telefono = numeros.obtener(sesion)?.numero ?? telefono;
+      } else if (fromMe && ((personal && !delAgente) || politica.modo !== 'responder')) {
         deDueno = true;
         const n = numeros.obtener(sesion)?.numero;
         if (n) telefono = n;
       }
     }
-    if (!fromMe || deDueno) personaId = personaPara({ telefono, lid: !deDueno && /@lid$/.test(remitenteJid ?? '') ? remitenteJid : null, nombre });
+    if ((!fromMe || deDueno) && !canalDueno) personaId = personaPara({ telefono, lid: !deDueno && /@lid$/.test(remitenteJid ?? '') ? remitenteJid : null, nombre });
     asegurarChat(chatId, { tipo: grupo ? 'grupo' : 'directo', personaId: grupo ? null : personaId, nombre: grupo ? (p._data?.Info?.GroupName ?? null) : nombre });
 
     let menciona = 0, responde = 0;
@@ -309,10 +325,10 @@ export function crearIngesta({ db, waha = null, numeros = null, config = {}, aju
 
     // Despierta al agente si algún número que ve este chat puede responder ahí (autoridad). Si conviene responder o
     // no en un chat compartido lo decide el agente, con los datos de quién lo ve y quién quedó elegido.
-    const despierta = !fromMe && (!numeros || numeros.puedeResponder(chatId));
+    const despierta = (!fromMe || canalDueno) && (!numeros || numeros.puedeResponder(chatId));
     const tipo = p._data?.Info?.Type ?? p._data?.type ?? p.type ?? (p.hasMedia ? 'media' : 'chat');
     const r = insertar.run(
-      sesion, String(p.id), chatId, personaId, remitenteJid, telefono, fromMe && !deDueno ? null : nombre, deDueno ? 0 : fromMe,
+      sesion, String(p.id), chatId, personaId, remitenteJid, telefono, fromMe && !deDueno && !canalDueno ? null : nombre, deDueno || canalDueno ? 0 : fromMe,
       String(tipo), p.body ?? '', p.hasMedia ? 1 : 0, p.media?.url ?? null, p.media?.mimetype ?? null,
       (typeof p.replyTo === 'object' ? p.replyTo?.id : p.replyTo) ?? null, menciona, responde,
       Number(p.timestamp ?? Math.floor(Date.now() / 1000)),

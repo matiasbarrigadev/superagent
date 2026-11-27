@@ -26,6 +26,9 @@ export const ALCANCES_CHATS = {
   ninguno: 'ningún chat',
 };
 export const POLITICA_PRINCIPAL = { texto: 'El número principal: responde como siempre, según el rol de cada persona.', modo: 'responder', chats: 'todos', lista: [], excluir: [], guardar: true, dias: null, escribir_primero: 'segun_rol', conectores: null, notas: '' };
+// El WhatsApp personal del Propietario usado como número del agente: cerrado por defecto. Solo "Mensaje a ti mismo"
+// es para hablar con el agente; en el resto no responde ni guarda nada hasta que el Propietario habilite chats.
+export const POLITICA_PERSONAL = { texto: 'Es el WhatsApp personal del Propietario. Me habla desde "Mensaje a ti mismo"; en sus otros chats no respondo ni guardo nada hasta que me diga cuáles habilitar, y lo que él escribe a mano nunca es una orden.', modo: 'responder', chats: 'lista', lista: [], excluir: [], guardar: true, dias: null, escribir_primero: 'no', conectores: null, notas: '' };
 export const POLITICA_MUDA = { texto: '', modo: 'nada', chats: 'ninguno', lista: [], excluir: [], guardar: false, dias: null, escribir_primero: 'no', conectores: null, notas: '' };
 
 const NOMBRE = /^[a-z0-9][a-z0-9-]{1,29}$/;
@@ -44,6 +47,7 @@ export function normalizarPolitica(p, base = POLITICA_MUDA) {
   x.conectores = Array.isArray(x.conectores) ? x.conectores.map(String) : null;
   x.notas = String(x.notas ?? '').slice(0, 1000);
   x.texto = String(x.texto ?? '').slice(0, 2000);
+  x.personal_de = x.personal_de ? Number(x.personal_de) || null : null;
   return x;
 }
 
@@ -98,6 +102,34 @@ export function crearNumeros({ db, principal, nombrePrincipal = 'default', crear
     auditar(db, 'whatsapp.numero.borrar', { detalle: { nombre } });
   }
 
+  /** El chat "Mensaje a ti mismo" de un número (su propio teléfono), o null si todavía no se sabe. */
+  function chatPropio(nombre) {
+    const n = fila(nombre ?? nombrePrincipal)?.numero;
+    return n ? `${n}@c.us` : null;
+  }
+
+  /**
+   * El número vinculado es el WhatsApp personal de un Propietario: queda en modo personal cerrado (sobre lo que
+   * ya hubiera configurado, solo se cierra lo que estaba abierto a todos). Devuelve true si recién se marcó.
+   */
+  function marcarPersonal(nombre, personaId) {
+    const f = obtener(nombre);
+    if (!f || f.politica.personal_de === personaId) return false;
+    const abierta = f.politica.chats === 'todos' || f.politica.modo === 'nada';
+    const p = normalizarPolitica(abierta ? { ...POLITICA_PERSONAL, personal_de: personaId } : { ...f.politica, personal_de: personaId, escribir_primero: 'no' }, POLITICA_MUDA);
+    db.prepare('UPDATE sesiones_wa SET politica = ?, actualizada = ? WHERE nombre = ?').run(JSON.stringify(p), reloj(), nombre);
+    auditar(db, 'whatsapp.numero.personal', { detalle: { nombre, persona: personaId } });
+    bitacora?.anotar?.({ personaId, donde: 'sistema', resultado: 'hecho', que: `el número "${f.etiqueta ?? nombre}" es el WhatsApp personal del Propietario: queda en modo personal cerrado` });
+    return true;
+  }
+
+  /** Sesión cuyo número es este teléfono (para saber si un Propietario es "el mismo WhatsApp" que el agente). */
+  function sesionDeTelefono(tel) {
+    const t = String(tel ?? '').replace(/\D/g, '');
+    if (t.length < 8) return null;
+    return db.prepare("SELECT nombre FROM sesiones_wa WHERE numero IS NOT NULL AND (numero = ? OR (length(numero) >= 10 AND substr(numero, -10) = substr(?, -10)))").get(t, t)?.nombre ?? null;
+  }
+
   /** Guarda el número de teléfono vinculado. Devuelve true si es la primera vez (para avisar a los Propietarios). */
   function anotarNumero(nombre, me) {
     const tel = String(me?.id ?? '').replace(/@.*$/, '').replace(/:\d+$/, '').replace(/\D/g, '');
@@ -113,6 +145,8 @@ export function crearNumeros({ db, principal, nombrePrincipal = 'default', crear
   /** ¿Este chat entra por este número? Lo que no entra no se guarda ni despierta a nadie. */
   function enAlcance(nombre, chatId) {
     const p = politicaDe(nombre);
+    // En el número personal del Propietario, "Mensaje a ti mismo" es su canal con el agente: siempre entra.
+    if (p.personal_de && chatId === chatPropio(nombre)) return true;
     if (p.excluir.includes(chatId)) return false;
     switch (p.chats) {
       case 'todos': return true;
@@ -236,7 +270,7 @@ export function crearNumeros({ db, principal, nombrePrincipal = 'default', crear
   }
 
   return {
-    nombrePrincipal, asegurarPrincipal, obtener, listar, varios, politicaDe, cliente, crear, borrar, anotarNumero, numerosPropios,
+    nombrePrincipal, asegurarPrincipal, obtener, listar, varios, politicaDe, cliente, crear, borrar, anotarNumero, numerosPropios, chatPropio, marcarPersonal, sesionDeTelefono,
     enAlcance, contarFuera, verChat, puedeResponder, sesionPara, puedeEnviar, limpiar, compartidos, chatsDe, ficha, configurar,
     elegirEnChat, resumenParaPropietario,
   };

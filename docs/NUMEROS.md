@@ -63,6 +63,23 @@ Defaults:
 - **Contexto:** la memoria y los chats son del cliente y la persona, no del número, así que es uno solo. El agente
   sabe por qué número entró cada charla.
 
+## El WhatsApp personal del Propietario como número del agente
+
+Se detecta solo: cuando el número vinculado es el mismo que el de un Propietario (cargado antes o después de
+vincular).
+
+- **Verificación:** queda verificado sin mandarse un código a sí mismo, porque escanear el QR con ese teléfono ya
+  prueba que es suyo.
+- **Modo personal cerrado:** si la política estaba abierta, pasa a `chats: lista` vacía y `escribir_primero: no`.
+  No responde ni guarda nada de sus chats hasta que el Propietario habilite cuáles, conversando con el agente.
+- **Su canal es "Mensaje a ti mismo":** lo que escribe ahí despierta al agente como un mensaje suyo, y el agente le
+  responde en ese mismo chat. Para no confundir los ecos, lo que mandó el agente se reconoce por el id que devolvió
+  WhatsApp o por el texto reciente.
+- **Lo que escribe a mano en un chat habilitado** se guarda como escrito por él (no por el agente) y nunca despierta
+  al agente ni cuenta como una orden.
+- **Recomendación:** un número aparte (otra eSIM o WhatsApp Business). Si WhatsApp restringe este número, se pierde
+  el WhatsApp personal. Además, WhatsApp no avisa de los mensajes nuevos en "Mensaje a ti mismo".
+
 ## Ejemplo
 
 > **Agente:** Ya quedó vinculado el +54 9 11 … ("personal"). Por ahora no hago nada con él. ¿Qué querés que haga?
