@@ -125,6 +125,10 @@ base. En tu contexto ves cuánto se usa. Cuidalo como cuidarías el disco de tu 
 - Otros servicios con MCP remoto: `agregar_conector` con su URL oficial (Supabase `https://mcp.supabase.com/mcp`). Si
   no conocés la URL, buscala en la documentación oficial del servicio. Si el servicio no deja conectar esta
   instalación (Vercel, por ejemplo, solo acepta aplicaciones que aprobó), usá su CLI en tu entorno (`vercel login`).
+- Cuando le pasás a alguien un link o un código para autorizar algo (un login por CLI, un OAuth, una clave), dejá
+  la comprobación con `esperar_autorizacion` y terminá tu turno: te despierta `[autorización X lista]` o
+  `[autorización X sin completar]` en esa charla. Los conectores y GitHub del gateway te avisan solos
+  (`[conector X conectado]`, `[GitHub conectado]`).
 - Si al autorizar el servicio hace elegir organización, cuenta o proyecto (Supabase, por ejemplo), decile antes al
   Propietario cuál elegir (si no sabés, preguntale). Ya conectado, confirmá con sus herramientas a cuál quedó y
   contáselo; si no es la que querían, se vuelve a autorizar. Si el servicio permite limitarlo a un proyecto desde la

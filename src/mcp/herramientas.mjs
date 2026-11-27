@@ -66,7 +66,7 @@ export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((r
   // Los motores y el disco se cambian con sus herramientas (ficha y confirmación en otro mensaje).
   && !(metodo !== 'GET' && /^\/api\/(motores|disco)(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, disco = null, rutinas = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, esperas = null, disco = null, rutinas = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -1195,6 +1195,36 @@ Mostráselo al Propietario (con lo que cuesta cada uno y lo que falta cargar) y 
         return `Listo, quedó así:
 ${motores.ficha()}
 Las charlas que cambian de motor arrancan una conversación nueva (con la memoria de siempre).`;
+      },
+    },
+
+    esperar_autorizacion: {
+      descripcion: 'Solo el Propietario, en su charla. Cuando le pasás un link o un código para autorizar algo (gh auth login, vercel login, supabase login, un OAuth, una clave que va a dejar en un archivo…), dejá dicho cómo comprobar que ya quedó y terminá tu turno: el gateway lo comprueba solo cada 10 s en tu entorno y te despierta en esta charla con "[autorización X lista]" o "[autorización X sin completar]". No te quedes esperando ni le preguntes "¿ya está?". "esperar" crea o reemplaza la espera de ese servicio; "ver" lista las que hay; "cancelar" saca una.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['esperar', 'ver', 'cancelar'] },
+          servicio: { type: 'string', description: 'Qué se está conectando, por ejemplo "Vercel".' },
+          comprobar: { type: 'string', description: 'Comando de tu terminal que sale bien (código 0) solo cuando ya quedó conectado, por ejemplo "gh auth status", "vercel whoami", "supabase projects list". Corre como vos, en tu entorno, hasta 20 s.' },
+          minutos: { type: 'integer', description: 'Cuánto esperar como máximo (1 a 30, por defecto 15).' },
+        },
+        required: ['accion'],
+      },
+      ejecutar(ctx, { accion, servicio, comprobar, minutos }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, deja esperas de autorización.');
+        if (!esperas) throw new ErrorHerramienta('Las esperas no están disponibles en esta instalación.');
+        if (accion === 'ver') {
+          const l = esperas.listar(ctx.chatId);
+          return l.length ? l.map((e) => `- ${e.servicio}: \`${e.comprobar}\`, vence en ${Math.max(0, Math.round((e.vence - reloj()) / 60_000))} min${e.ultima_salida ? ` (última respuesta: ${e.ultima_salida.slice(-120)})` : ''}`).join('\n') : 'No hay esperas en esta charla.';
+        }
+        if (accion === 'cancelar') return esperas.cancelar(ctx.chatId, servicio) ? `Listo, ya no espero ${servicio}.` : `No había una espera de ${servicio} en esta charla.`;
+        if (accion !== 'esperar') throw new ErrorHerramienta('Acción desconocida.');
+        try {
+          const e = esperas.crear({ chatId: ctx.chatId, personaId: ctx.personaId, servicio, comprobar, venceMin: minutos });
+          return `Listo: compruebo ${e.servicio} cada 10 s durante ${e.minutos} min y te despierto acá con el resultado. Terminá tu turno.`;
+        } catch (err) {
+          throw new ErrorHerramienta(err.message);
+        }
       },
     },
 

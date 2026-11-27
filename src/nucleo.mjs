@@ -47,8 +47,9 @@ import { crearRepos } from './codigo/repos.mjs';
 import { crearPublicador } from './codigo/publicar.mjs';
 import { crearProcedimientos } from './codigo/procedimiento.mjs';
 import { crearSesiones } from './codigo/sesiones.mjs';
+import { crearEsperas } from './servicios/esperas.mjs';
 
-export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
+export function crearNucleo({ correrEsperas = undefined, dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
   const ajustes = crearAjustes(db);
   // Primera vez: la zona horaria sale de TZ del contenedor (la del template), si nadie la eligió todavía.
   const tz = process.env.TZ;
@@ -220,7 +221,9 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
     gasto: (motor, desde) => db.prepare('SELECT COALESCE(SUM(costo_usd), 0) AS g FROM corridas WHERE credencial_usada = ? AND inicio >= ?').get(motor, desde).g });
   // Disco: limpieza automática, aviso al llenarse y lo que ve el agente para cuidar su espacio.
   const disco = config.dataDir ? crearDisco({ db, config, ajustes, aislamiento: ais, avisos, despertarPropietarios, reloj, log }) : null;
-  const herramientas = crearHerramientas({ db, disco, rutinas, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  // Autorizaciones que el agente espera: el gateway comprueba y lo despierta en la charla con el resultado.
+  const esperas = crearEsperas({ db, aislamiento: ais, despertar: (e) => ref.motor?.despertar(e), ...(correrEsperas ? { correr: correrEsperas } : {}), reloj, log });
+  const herramientas = crearHerramientas({ db, esperas, disco, rutinas, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
   const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, rutinas, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
@@ -230,6 +233,7 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
   ref.motor = motor;
   const programador = crearProgramador({ db, politica, motor, avisos, bitacora, log });
   motor.alCadaTick((ahora) => programador.tick(ahora));
+  motor.alCadaTick((ahora) => esperas.revisar(ahora));
   const entradas = crearEntradas({ db, motor, chatDePersona });
   const verificacion = crearVerificacion({ db, waha, reloj });
   const medios = crearProcesadorMedios({ db, config, aislamiento: ais, cuenta: cuentaClaude, ajustes, politica, ...(correrMedios ? { correr: correrMedios } : {}), log });
@@ -300,7 +304,7 @@ export function crearNucleo({ dormir = undefined, correrPasos = undefined, fetch
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas, esperas,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }
