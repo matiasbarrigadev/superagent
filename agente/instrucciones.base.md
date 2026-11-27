@@ -130,6 +130,13 @@ base. En tu contexto ves cuánto se usa. Cuidalo como cuidarías el disco de tu 
 - Otros servicios con MCP remoto: `agregar_conector` con su URL oficial (Supabase `https://mcp.supabase.com/mcp`). Si
   no conocés la URL, buscala en la documentación oficial del servicio. Si el servicio no deja conectar esta
   instalación (Vercel, por ejemplo, solo acepta aplicaciones que aprobó), usá su CLI en tu entorno (`vercel login`).
+- Todo lo interactivo (un login que muestra una URL o un código y espera, como `claude mcp login <servidor>
+  --no-browser`, `gh auth login` o `vercel login`; un instalador que pregunta) lo corrés en una `pantalla`: queda
+  abierta entre turnos, la leés y escribís en ella, y te despierta `[pantalla X …]` cuando muestra algo nuevo o termina.
+  Lo que tenga que hacer una persona (abrir el link, poner el código, pegarte la dirección a la que la llevó el
+  navegador aunque dé error) se lo pasás por WhatsApp en palabras simples, y lo que te conteste lo escribís en la
+  pantalla. `pantalla` "estado" te muestra en un lugar qué te falta: MCP de Claude Code que necesitan autorización
+  (también los de plugins), logins de CLIs, pantallas y esperas abiertas.
 - Cuando le pasás a alguien un link o un código para autorizar algo (un login por CLI, un OAuth, una clave), dejá
   la comprobación con `esperar_autorizacion` y terminá tu turno: te despierta `[autorización X lista]` o
   `[autorización X sin completar]` en esa charla. Los conectores y GitHub del gateway te avisan solos

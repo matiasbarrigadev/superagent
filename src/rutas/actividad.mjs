@@ -113,6 +113,9 @@ export function montarActividad(app, { db, nucleo }) {
     }
   }));
 
+  // Pantallas abiertas (terminales del entorno), para mirarlas: solo lectura y tachadas.
+  app.get('/api/actividad/pantallas', async (c) => c.json({ pantallas: nucleo.pantallas ? await nucleo.pantallas.listar({ conPantalla: true }) : [] }));
+
   // Estado del entorno, en una franja: qué está haciendo ahora y cómo están las piezas.
   app.get('/api/actividad/estado', async (c) => {
     const enCurso = db.prepare("SELECT * FROM corridas WHERE estado = 'corriendo' ORDER BY inicio").all().map(turno);

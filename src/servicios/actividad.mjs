@@ -146,5 +146,5 @@ export function crearActividad({ db, entorno = null, reloj = () => Date.now(), l
   /** Un turno empezó o terminó (lo avisa el motor). */
   function turno(tipo, corridaId) { avisar({ evento: 'turno', tipo, corrida_id: corridaId, ts: reloj() }); }
 
-  return { registrar, pasos, podar, escuchar, turno, describirHerramienta, resumirTurno };
+  return { registrar, pasos, podar, escuchar, turno, limpiarTexto: limpiar, describirHerramienta, resumirTurno };
 }

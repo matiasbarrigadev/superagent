@@ -68,7 +68,7 @@ export function claudeFalso(nucleoRef, guion = () => []) {
   return { ejecutar, corridas };
 }
 
-export function armar({ waha = {}, claude = {}, guion = undefined, ahora = 1_800_000_000_000, correrMedios = undefined, fetchConectores = undefined, fetchGithub = undefined, correrPasos = undefined, fetchVerificacion = undefined, correrEsperas = undefined, cuentaClaude = null } = {}) {
+export function armar({ waha = {}, claude = {}, guion = undefined, ahora = 1_800_000_000_000, correrMedios = undefined, fetchConectores = undefined, fetchGithub = undefined, correrPasos = undefined, fetchVerificacion = undefined, correrEsperas = undefined, tmuxPantallas = undefined, correrEstado = undefined, cuentaClaude = null } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-prueba-'));
   const config = {
     setupCode: 'PRUE-BA12-3456',
@@ -92,7 +92,7 @@ export function armar({ waha = {}, claude = {}, guion = undefined, ahora = 1_800
   // Otros números de WhatsApp: un WAHA falso por sesión, con sus envíos aparte.
   const otrosWa = new Map();
   const crearClienteWa = (session) => { const f = wahaFalso(waha); otrosWa.set(session, f); return f; };
-  const nucleo = crearNucleo({ db, config, waha: w, crearClienteWa, ejecutar: falso.ejecutar, cuentaClaude, reloj, log: silencio, correrMedios, fetchConectores, fetchGithub, correrPasos, fetchVerificacion, correrEsperas, dormir: async () => {} });
+  const nucleo = crearNucleo({ db, config, waha: w, crearClienteWa, ejecutar: falso.ejecutar, cuentaClaude, reloj, log: silencio, correrMedios, fetchConectores, fetchGithub, correrPasos, fetchVerificacion, correrEsperas, tmuxPantallas, correrEstado, dormirPantallas: async () => {}, dormir: async () => {} });
   ref.n = nucleo;
   const app = crearApp({
     db, config, auth, nucleo, log: silencio,

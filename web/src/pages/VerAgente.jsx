@@ -277,6 +277,34 @@ function Actividad() {
   );
 }
 
+/** Las terminales que dejó abiertas el agente, como se ven ahora (solo lectura, con los secretos tachados). */
+function Pantallas() {
+  const { datos, error } = useDatos('/api/actividad/pantallas', { cada: 3000 });
+  const lista = datos?.pantallas ?? [];
+  return (
+    <div className="scroll-fino min-h-0 flex-1 overflow-y-auto bg-stone-50/60 dark:bg-stone-950/30">
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-5">
+        <p className="text-sm text-stone-600 dark:text-stone-400">
+          Terminales que el agente deja abiertas en su entorno para lo interactivo (un login que muestra un link o un código, un instalador que pregunta). Cuando piden algo, el agente se entera solo y te lo pasa por WhatsApp.
+        </p>
+        {error && <Aviso>{error}</Aviso>}
+        {!datos && !error && <div className="py-10 text-center text-stone-400"><Girando className="mx-auto size-6" /></div>}
+        {datos && !lista.length && <p className="py-10 text-center text-sm text-stone-500">No hay pantallas abiertas.</p>}
+        {lista.map((p) => (
+          <section key={p.nombre} className="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
+            <header className="flex flex-wrap items-center gap-2 border-b border-stone-200 px-4 py-2 text-sm dark:border-stone-800">
+              <span className="font-medium">{p.nombre}</span>
+              <code className="min-w-0 truncate text-xs text-stone-500">{p.comando}</code>
+              <span className="ml-auto">{p.terminada ? <Chip>terminó{p.codigo != null ? ` (${p.codigo})` : ''}</Chip> : <Chip tono="verde">abierta</Chip>}</span>
+            </header>
+            <pre className="scroll-fino max-h-96 overflow-auto whitespace-pre-wrap break-words bg-stone-950 p-3 font-mono text-xs leading-relaxed text-stone-200">{p.pantalla || '(vacía)'}</pre>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function VerAgente() {
   const [pestana, setPestana] = useState('actividad');
   const vivo = useVivoProveedor();
@@ -284,14 +312,14 @@ export default function VerAgente() {
     <Vivo.Provider value={vivo}>
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-stone-900">
       <div className="flex items-center gap-1 border-b border-stone-200 px-3 pt-2 dark:border-stone-800" role="tablist">
-        {[['actividad', 'Actividad'], ['hablar', 'Hablar con el agente']].map(([id, nombre]) => (
+        {[['actividad', 'Actividad'], ['pantallas', 'Pantallas'], ['hablar', 'Hablar con el agente']].map(([id, nombre]) => (
           <button key={id} type="button" role="tab" aria-selected={pestana === id} onClick={() => setPestana(id)}
             className={cx('-mb-px border-b-2 px-3 py-2 text-sm font-medium', pestana === id ? 'border-emerald-600 text-emerald-800 dark:text-emerald-300' : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200')}>
             {nombre}
           </button>
         ))}
       </div>
-      {pestana === 'actividad' ? <><Estado /><Actividad /></> : <div className="min-h-0 flex-1"><Chat /></div>}
+      {pestana === 'actividad' ? <><Estado /><Actividad /></> : pestana === 'pantallas' ? <Pantallas /> : <div className="min-h-0 flex-1"><Chat /></div>}
     </div>
     </Vivo.Provider>
   );

@@ -49,8 +49,10 @@ import { crearProcedimientos } from './codigo/procedimiento.mjs';
 import { crearSesiones } from './codigo/sesiones.mjs';
 import { crearEsperas } from './servicios/esperas.mjs';
 import { crearActividad } from './servicios/actividad.mjs';
+import { crearPantallas } from './servicios/pantallas.mjs';
+import { correrPaso } from './codigo/procedimiento.mjs';
 
-export function crearNucleo({ correrEsperas = undefined, dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
+export function crearNucleo({ tmuxPantallas = undefined, dormirPantallas = undefined, correrEstado = undefined, correrEsperas = undefined, dormir = undefined, correrPasos = undefined, fetchVerificacion = undefined, fetchGithub = undefined, gitRepos = undefined, fetchConectores = undefined, db, config, waha, crearClienteWa = null, cuentaClaude = null, ejecutar = null, aislamiento = null, correrMedios = undefined, reloj = () => Date.now(), version = '0.0.0', log = console, alCambiarEstado = () => {} }) {
   const ajustes = crearAjustes(db);
   // Primera vez: la zona horaria sale de TZ del contenedor (la del template), si nadie la eligió todavía.
   const tz = process.env.TZ;
@@ -245,11 +247,35 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
   const disco = config.dataDir ? crearDisco({ db, config, ajustes, aislamiento: ais, avisos, despertarPropietarios, reloj, log }) : null;
   // Autorizaciones que el agente espera: el gateway comprueba y lo despierta en la charla con el resultado.
   const esperas = crearEsperas({ db, aislamiento: ais, despertar: (e) => ref.motor?.despertar(e), ...(correrEsperas ? { correr: correrEsperas } : {}), reloj, log });
-  const herramientas = crearHerramientas({ db, esperas, disco, rutinas, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
+  const actividad = crearActividad({ db, entorno, reloj, log });
+  // Pantallas: terminales persistentes del entorno del Propietario (mismo HOME y configuración de Claude Code que sus
+  // corridas, sin la credencial de Claude), con su vigía.
+  const entornoPantallas = () => {
+    const l = ais?.rutas ? ais.rutas('propietario') : null;
+    const base = cuentaClaude?.entorno ? cuentaClaude.entorno({ home: l?.base, configDir: l?.config, tmp: l?.tmp, credencial: 'ninguna' }) : { PATH: process.env.PATH, HOME: l?.base ?? process.env.HOME };
+    let vars = {};
+    try { vars = entorno.variables(); } catch {}
+    return { ...vars, ...base, TERM: 'xterm-256color' };
+  };
+  const pantallas = crearPantallas({ db, aislamiento: ais, entornoDe: entornoPantallas, limpiar: (t, n) => actividad.limpiarTexto(t, n),
+    despertar: (e) => ref.motor?.despertar(e), ...(tmuxPantallas ? { tmux: tmuxPantallas } : {}), ...(dormirPantallas ? { dormir: dormirPantallas } : {}), reloj, log });
+  /** Todo lo que el agente necesita saber de su entorno, en un solo lugar (para la herramienta pantalla "estado"). */
+  async function estadoEntorno() {
+    const l = ais?.rutas ? ais.rutas('propietario') : null;
+    const usuario = ais?.activo ? ais.usuarioDe('propietario') : null;
+    const correr = correrEstado ?? correrPaso;
+    const mcp = await correr('claude mcp list', { cwd: l?.trabajo ?? process.cwd(), env: entornoPantallas(), usuario, timeoutMs: 45_000 }).catch((e) => ({ codigo: -1, salida: e.message }));
+    return {
+      pantallas: await pantallas.listar(),
+      logins: logins.detectar(),
+      mcpClaude: actividad.limpiarTexto(String(mcp.salida ?? '').trim(), 3000) || '(sin salida)',
+      esperas: esperas.listar(),
+    };
+  }
+  const herramientas = crearHerramientas({ db, esperas, pantallas, estadoEntorno, disco, rutinas, motores, cuentaCodex, numeros, paquetes, despertarPropietarios, panel: (o) => (ref.panel ? ref.panel(o) : Promise.reject(new Error('El panel no está disponible.'))), waha, apps, publicUrl: config.publicUrl, bitacora, consumo, salida, ajustes, memoria, entorno, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, github, publicador, sesiones, chatDePersona, despertarSalida: () => salida.procesar().catch(() => {}), reloj });
   const mcp = crearServidorMcp({ herramientas, version, log });
   const armador = crearArmador({ db, config, politica, ajustes, memoria, entorno, consumo, disco, rutinas, avisos, aislamiento: ais, conectores, roles, numeros });
   const ej = ejecutar ?? crearEjecutorComun({ adaptadores, aislamiento: ais, log });
-  const actividad = crearActividad({ db, entorno, reloj, log });
   const motor = crearMotor({ db, config, actividad,
     // Una rutina que falla por algo técnico: el agente se lo cuenta a los Propietarios.
     alFallaRutina: ({ rutina, error }) => despertarPropietarios({ origen: `rutina:${rutina.id}`, texto: `[rutina R-${rutina.id} falló] ${nombreDe(rutina.creada_por)} la había pedido ("${String(rutina.instruccion).slice(0, 200)}"). Error: ${String(error ?? '').slice(0, 300)}` }), ajustes, politica, armador, ejecutar: ej, motores, mcp, salida, avisos, aprobaciones, propuestas, archivos, aislamiento: ais, conectores, repos, sesiones, waha: waRuteado, consumo, preguntar: cuentaClaude?.preguntar ? (o) => cuentaClaude.preguntar(o) : null, reloj, log });
@@ -257,6 +283,7 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
   const programador = crearProgramador({ db, politica, motor, avisos, bitacora, log });
   motor.alCadaTick((ahora) => programador.tick(ahora));
   motor.alCadaTick((ahora) => esperas.revisar(ahora));
+  motor.alCadaTick((ahora) => { pantallas.revisar(ahora).catch(() => {}); });
   const entradas = crearEntradas({ db, motor, chatDePersona });
   const verificacion = crearVerificacion({ db, waha, reloj });
   const medios = crearProcesadorMedios({ db, config, aislamiento: ais, cuenta: cuentaClaude, ajustes, politica, ...(correrMedios ? { correr: correrMedios } : {}), log });
@@ -327,7 +354,7 @@ export function crearNucleo({ correrEsperas = undefined, dormir = undefined, cor
     usarPanel: (fn) => { ref.panel = fn; },
     paquetes, numeros, alVincularNumero,
     apps, waha,
-    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas, esperas, actividad,
+    ajustes, politica, roles, memoria, entorno, bitacora, consumo, salida, avisos, aprobaciones, propuestas, herramientas, mcp, armador, motor, motores, cuentaCodex, disco, rutinas, esperas, actividad, pantallas,
     alConectar, iniciarConfiguracion, logins, programador, entradas, verificacion, ingesta, chatDePersona, aislamiento: ais, archivos, medios, conectores, github, repos, publicador, procedimientos, sesiones,
   };
 }

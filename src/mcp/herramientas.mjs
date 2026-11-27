@@ -66,7 +66,7 @@ export const rutaPanelPermitida = (ruta, metodo = 'GET') => !PANEL_FUERA.some((r
   // Los motores y el disco se cambian con sus herramientas (ficha y confirmación en otro mensaje).
   && !(metodo !== 'GET' && /^\/api\/(motores|disco)(\/|$)/.test(ruta));
 
-export function crearHerramientas({ db, esperas = null, disco = null, rutinas = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
+export function crearHerramientas({ db, esperas = null, pantallas = null, estadoEntorno = null, disco = null, rutinas = null, motores = null, cuentaCodex = null, numeros = null, paquetes = null, despertarPropietarios = null, panel = null, waha = null, apps = null, publicUrl = null, bitacora = null, consumo = null, salida, ajustes, memoria, entorno = null, avisos, aprobaciones, propuestas, archivos = null, aislamiento = null, conectores = null, repos = null, github = null, publicador = null, sesiones = null, chatDePersona = () => null, despertarSalida = () => {}, reloj = () => Date.now() }) {
   const publicarAhora = (d, o) => publicador.publicarAhora(d, o);
   const activarInstrucciones = (v, quien) => publicador.activarInstrucciones(v, quien);
   const politicaDe = (ctx, accion) => {
@@ -1195,6 +1195,52 @@ Mostráselo al Propietario (con lo que cuesta cada uno y lo que falta cargar) y 
         return `Listo, quedó así:
 ${motores.ficha()}
 Las charlas que cambian de motor arrancan una conversación nueva (con la memoria de siempre).`;
+      },
+    },
+
+    pantalla: {
+      descripcion: 'Solo el Propietario, en su charla. Terminales que siguen abiertas entre tus turnos, en tu entorno (tmux), para lo interactivo: un login que muestra una URL o un código y espera (claude mcp login <servidor>, gh auth login, vercel login…), un instalador que pregunta, un proceso largo. "abrir" corre un comando y te devuelve la pantalla; "ver" la lee; "escribir" pega texto (y Enter) o manda teclas (C-c, Up, y…); "cerrar"; "listar". "estado": todo tu entorno en un lugar (MCP de Claude Code y cuáles necesitan autorización, logins de CLIs, pantallas abiertas, esperas). Con avisar (por defecto sí) te despierto en esta charla cuando la pantalla muestra algo nuevo y queda quieta, o cuando el proceso termina: no te quedes esperando. Lo que pida una persona (abrir un link, un código, pegar la dirección a la que la llevó el navegador aunque dé error), pasáselo por WhatsApp en palabras simples y, cuando te conteste, escribilo en la pantalla.',
+      esquema: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', enum: ['abrir', 'ver', 'escribir', 'cerrar', 'listar', 'estado'] },
+          nombre: { type: 'string', description: 'Nombre corto de la pantalla, por ejemplo "login-calendar".' },
+          comando: { type: 'string', description: 'abrir: el comando, por ejemplo "claude mcp login google-calendar --no-browser".' },
+          texto: { type: 'string', description: 'escribir: texto a pegar tal cual.' },
+          enter: { type: 'boolean', description: 'escribir: apretar Enter después (por defecto sí).' },
+          teclas: { type: 'array', items: { type: 'string' }, description: 'escribir: teclas, por ejemplo ["C-c"] o ["Down", "Enter"].' },
+          avisar: { type: 'boolean', description: 'abrir: despertarte cuando cambie o termine (por defecto sí).' },
+        },
+        required: ['accion'],
+      },
+      async ejecutar(ctx, { accion, nombre, comando, texto, enter = true, teclas = [], avisar = true }) {
+        if (ctx.decidir('aprobar').decision !== 'permitir' || !ctx.completo) throw new ErrorHerramienta('Solo el Propietario, en su charla, usa pantallas.');
+        if (!pantallas) throw new ErrorHerramienta('Las pantallas no están disponibles en esta instalación.');
+        const mostrar = (p) => `Pantalla "${p.nombre}"${p.terminada ? ` (el proceso terminó${p.codigo != null ? `, código ${p.codigo}` : ''})` : ''}:\n<pantalla>\n${p.texto || '(vacía)'}\n</pantalla>`;
+        try {
+          if (accion === 'abrir') return mostrar(await pantallas.abrir({ nombre, comando, chatId: ctx.chatId, personaId: ctx.personaId, avisar }));
+          if (accion === 'ver') return mostrar(await pantallas.ver(nombre));
+          if (accion === 'escribir') return mostrar(await pantallas.escribir(nombre, { texto, enter, teclas }));
+          if (accion === 'cerrar') return (await pantallas.cerrar(nombre)) ? 'Cerrada.' : 'No estaba abierta.';
+          if (accion === 'listar') {
+            const l = await pantallas.listar();
+            return l.length ? l.map((p) => `- ${p.nombre}: ${p.comando}${p.terminada ? ' (terminó)' : ''}`).join('\n') : 'No hay pantallas abiertas.';
+          }
+          if (accion === 'estado') {
+            if (!estadoEntorno) throw new ErrorHerramienta('No disponible.');
+            const e = await estadoEntorno();
+            return [
+              `MCP de Claude Code (claude mcp list):\n${e.mcpClaude}`,
+              `Logins de CLIs: ${e.logins.map((x) => `${x.servicio} ${x.conectado ? `conectado${x.cuenta ? ` (${x.cuenta})` : ''}` : 'sin login'}`).join(', ') || 'ninguno detectado'}`,
+              `Pantallas abiertas: ${e.pantallas.map((p) => `${p.nombre} (${p.comando}${p.terminada ? ', terminó' : ''})`).join(', ') || 'ninguna'}`,
+              `Esperas de autorización: ${e.esperas.map((x) => x.servicio).join(', ') || 'ninguna'}`,
+            ].join('\n\n');
+          }
+        } catch (err) {
+          if (err instanceof ErrorHerramienta) throw err;
+          throw new ErrorHerramienta(err.message);
+        }
+        throw new ErrorHerramienta('Acción desconocida.');
       },
     },
 

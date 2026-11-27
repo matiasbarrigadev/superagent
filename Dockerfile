@@ -45,10 +45,10 @@ ARG VERCEL_VERSION=65.12.1
 ARG SUPABASE_VERSION=2.122.1
 
 # Herramientas del agente:
-# - base: git, gh, ssh;  - medios: ffmpeg, poppler (PDF), tesseract (OCR);
+# - base: git, gh, ssh, tmux (pantallas);  - medios: ffmpeg, poppler (PDF), tesseract (OCR);
 # - documentos: python con python-docx, openpyxl y python-pptx;  - navegador: Chromium (sin interfaz).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini git ca-certificates curl openssh-client gh procps passwd \
+ && apt-get install -y --no-install-recommends tini git ca-certificates curl openssh-client gh procps passwd tmux \
       ffmpeg poppler-utils tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
       python3 python3-pip python3-docx python3-openpyxl python3-pil python3-lxml \
       chromium fonts-dejavu-core fonts-liberation \
